@@ -17,6 +17,7 @@
 #include "bvh/node.h"
 #include "bvh/unaligned.h"
 
+#include "util/debug.h"
 #include "util/foreach.h"
 #include "util/progress.h"
 
@@ -425,17 +426,13 @@ void BVH2::refit_primitives(int start, int end, BoundBox &bbox, uint &visibility
       }
       else if (pack.prim_type[prim] & PRIMITIVE_NONPLANAR_POLYGON) {
         /* Nonplanar Polygon */
-        const NonplanarPolygon *nonplanar_polygon = static_cast<const NonplanarPolygon *>(
+        const NonplanarPolygonMesh *mesh = static_cast<const NonplanarPolygonMesh *>(
             ob->get_geometry());
-        int prim_offset = (params.top_level) ? nonplanar_polygon->prim_offset : 0;
-        const float3 *verts = &nonplanar_polygon->verts[0];
-
-        const size_t num_triangles = 1;
-        for (uint j = 0; j < num_triangles; j++) {
-          const size_t num_verts = nonplanar_polygon->verts.size();
-          for (uint j = 0; j < num_verts; j++) {
-            bbox.grow(verts[j]);
-          }
+        int prim_offset = (params.top_level) ? mesh->prim_offset : 0;
+        int f_id = pidx - prim_offset;
+        const float3 *verts = &mesh->verts[0];
+        for (uint j = 0; j < mesh->face_sizes[f_id]; j++) {
+          bbox.grow(verts[mesh->face_starts[f_id] + j]);
         }
       }
       else {

@@ -36,7 +36,7 @@ static Geometry::Type determine_geom_type(BObjectInfo &b_ob_info, bool use_parti
     return Geometry::VOLUME;
   }
 
-  return Geometry::NONPLANAR_POLYGON;
+  return Geometry::NONPLANAR_POLYGON_MESH;
   // return Geometry::MESH;
 }
 
@@ -106,8 +106,8 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
     else if (geom_type == Geometry::POINTCLOUD) {
       geom = scene->create_node<PointCloud>();
     }
-    else if (geom_type == Geometry::NONPLANAR_POLYGON) {
-      geom = scene->create_node<NonplanarPolygon>();
+    else if (geom_type == Geometry::NONPLANAR_POLYGON_MESH) {
+      geom = scene->create_node<NonplanarPolygonMesh>();
     }
     else {
       geom = scene->create_node<Mesh>();
@@ -172,9 +172,9 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
       PointCloud *pointcloud = static_cast<PointCloud *>(geom);
       sync_pointcloud(pointcloud, b_ob_info);
     }
-    else if (geom_type == Geometry::NONPLANAR_POLYGON) {
-      NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
-      sync_nonplanar_polygon(b_depsgraph, b_ob_info, nonplanar_polygon);
+    else if (geom_type == Geometry::NONPLANAR_POLYGON_MESH) {
+      NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
+      sync_nonplanar_polygon_mesh(b_depsgraph, b_ob_info, mesh);
     }
     else {
       Mesh *mesh = static_cast<Mesh *>(geom);

@@ -355,27 +355,27 @@ void BVHBuild::add_reference_points(BoundBox &root,
   }
 }
 
-void BVHBuild::add_reference_nonplanar_polygon(BoundBox &root,
-                                               BoundBox &center,
-                                               NonplanarPolygon *nonplanar_polygon,
-                                               int object_index)
+void BVHBuild::add_reference_nonplanar_polygons(BoundBox &root,
+                                                BoundBox &center,
+                                                NonplanarPolygonMesh *mesh,
+                                                int object_index)
 {
   const PrimitiveType primitive_type = PRIMITIVE_NONPLANAR_POLYGON;
-  const Attribute *attr_mP = NULL;
-  const size_t num_triangles = 1;
-  const float3 *verts = &nonplanar_polygon->verts[0];
-  for (uint j = 0; j < num_triangles; j++) {
-    if (attr_mP == NULL) {
-      BoundBox bounds = BoundBox::empty;
-      const size_t num_verts = nonplanar_polygon->verts.size();
-      for (uint j = 0; j < num_verts; j++) {
-        bounds.grow(verts[j]);
-      }
-      if (bounds.valid()) {
-        references.push_back(BVHReference(bounds, 0, object_index, primitive_type));
-        root.grow(bounds);
-        center.grow(bounds.center2());
-      }
+  const size_t num_faces = mesh->prim_space();
+  const float3 *verts = &mesh->verts[0];
+  const int *face_starts = &mesh->face_starts[0];
+  const int *face_sizes = &mesh->face_sizes[0];
+  for (uint j = 0; j < num_faces; j++) {
+    BoundBox bounds = BoundBox::empty;
+    const int &face_start = face_starts[j];
+    const int &face_size = face_sizes[j];
+    for (uint k = 0; k < face_size; k++) {
+      bounds.grow(verts[face_start + k]);
+    }
+    if (bounds.valid()) {
+      references.push_back(BVHReference(bounds, j, object_index, primitive_type));
+      root.grow(bounds);
+      center.grow(bounds.center2());
     }
   }
 }
@@ -397,9 +397,9 @@ void BVHBuild::add_reference_geometry(BoundBox &root,
     PointCloud *pointcloud = static_cast<PointCloud *>(geom);
     add_reference_points(root, center, pointcloud, object_index);
   }
-  else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
-    NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
-    add_reference_nonplanar_polygon(root, center, nonplanar_polygon, object_index);
+  else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+    NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
+    add_reference_nonplanar_polygons(root, center, mesh, object_index);
   }
 }
 
@@ -434,8 +434,9 @@ static size_t count_primitives(Geometry *geom)
     PointCloud *pointcloud = static_cast<PointCloud *>(geom);
     return pointcloud->num_points();
   }
-  else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
-    return 1;
+  else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+    NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
+    return mesh->prim_space();
   }
 
   return 0;

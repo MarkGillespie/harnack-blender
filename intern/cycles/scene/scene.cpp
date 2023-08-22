@@ -730,12 +730,12 @@ template<> Mesh *Scene::create_node<Mesh>()
   return node;
 }
 
-template<> NonplanarPolygon *Scene::create_node<NonplanarPolygon>()
+template<> NonplanarPolygonMesh *Scene::create_node<NonplanarPolygonMesh>()
 {
-  NonplanarPolygon *node = new NonplanarPolygon();
+  NonplanarPolygonMesh *node = new NonplanarPolygonMesh();
   node->set_owner(this);
   geometry.push_back(node);
-  geometry_manager->tag_update(this, GeometryManager::NONPLANAR_POLYGON_ADDED);
+  geometry_manager->tag_update(this, GeometryManager::NONPLANAR_POLYGON_MESH_ADDED);
   return node;
 }
 

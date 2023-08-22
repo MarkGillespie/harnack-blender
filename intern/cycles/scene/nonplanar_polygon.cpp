@@ -20,53 +20,59 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* NonplanarPolygon */
+/* NonplanarPolygonMesh */
 
-NODE_DEFINE(NonplanarPolygon)
+NODE_DEFINE(NonplanarPolygonMesh)
 {
   NodeType *type = NodeType::add(
-      "nonplanarPolygon", create, NodeType::NONE, Geometry::get_node_base_type());
+      "Nonplanar Polygon", create, NodeType::NONE, Geometry::get_node_base_type());
 
   SOCKET_POINT_ARRAY(verts, "Vertices", array<float3>());
+  SOCKET_INT_ARRAY(face_starts, "Face Starts", array<int>());
+  SOCKET_INT_ARRAY(face_sizes, "Face Sizes", array<int>());
   SOCKET_INT_ARRAY(shader, "Shader", array<int>());
 
   return type;
 }
 
-NonplanarPolygon::NonplanarPolygon(const NodeType *node_type, Type geom_type_)
+NonplanarPolygonMesh::NonplanarPolygonMesh(const NodeType *node_type, Type geom_type_)
     : Geometry(node_type, geom_type_)
 {
   vert_offset = 0;
 }
 
-NonplanarPolygon::NonplanarPolygon()
-    : NonplanarPolygon(get_node_type(), Geometry::NONPLANAR_POLYGON)
+NonplanarPolygonMesh::NonplanarPolygonMesh()
+    : NonplanarPolygonMesh(get_node_type(), Geometry::NONPLANAR_POLYGON_MESH)
 {
 }
 
-NonplanarPolygon::~NonplanarPolygon() {}
+NonplanarPolygonMesh::~NonplanarPolygonMesh() {}
 
-void NonplanarPolygon::resize_nonplanar_polygon(int numverts)
+void NonplanarPolygonMesh::resize_nonplanar_polygon(int numverts, int numfaces)
 {
   verts.resize(numverts);
-  shader.resize(1);
+  face_starts.resize(numfaces);
+  face_sizes.resize(numfaces);
+  shader.resize(numfaces);
   attributes.resize();
 }
 
-void NonplanarPolygon::reserve_nonplanar_polygon(int numverts)
+void NonplanarPolygonMesh::reserve_nonplanar_polygon(int numverts, int numfaces)
 {
   /* reserve space to add verts later */
   verts.reserve(numverts);
-  shader.reserve(1);
+  face_starts.reserve(numfaces);
+  face_sizes.reserve(numfaces);
+  shader.reserve(numfaces);
   attributes.resize(true);
 }
 
-void NonplanarPolygon::clear_non_sockets()
+void NonplanarPolygonMesh::clear_non_sockets()
 {
   Geometry::clear(true);
 }
 
-void NonplanarPolygon::clear(bool preserve_shaders, bool preserve_voxel_data)
+void NonplanarPolygonMesh::clear(bool preserve_shaders, bool preserve_voxel_data)
 {
   Geometry::clear(preserve_shaders);
 
@@ -78,24 +84,24 @@ void NonplanarPolygon::clear(bool preserve_shaders, bool preserve_voxel_data)
   clear_non_sockets();
 }
 
-void NonplanarPolygon::clear(bool preserve_shaders)
+void NonplanarPolygonMesh::clear(bool preserve_shaders)
 {
   clear(preserve_shaders, false);
 }
 
-void NonplanarPolygon::add_vertex(float3 P)
+void NonplanarPolygonMesh::add_vertex(float3 P)
 {
   verts.push_back_reserved(P);
   tag_verts_modified();
 }
 
-void NonplanarPolygon::add_vertex_slow(float3 P)
+void NonplanarPolygonMesh::add_vertex_slow(float3 P)
 {
   verts.push_back_slow(P);
   tag_verts_modified();
 }
 
-void NonplanarPolygon::copy_center_to_motion_step(const int motion_step)
+void NonplanarPolygonMesh::copy_center_to_motion_step(const int motion_step)
 {
   Attribute *attr_mP = attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
 
@@ -112,7 +118,7 @@ void NonplanarPolygon::copy_center_to_motion_step(const int motion_step)
   }
 }
 
-void NonplanarPolygon::get_uv_tiles(ustring map, unordered_set<int> &tiles)
+void NonplanarPolygonMesh::get_uv_tiles(ustring map, unordered_set<int> &tiles)
 {
   Attribute *attr;
 
@@ -128,7 +134,7 @@ void NonplanarPolygon::get_uv_tiles(ustring map, unordered_set<int> &tiles)
   }
 }
 
-void NonplanarPolygon::compute_bounds()
+void NonplanarPolygonMesh::compute_bounds()
 {
   BoundBox bnds = BoundBox::empty;
   size_t verts_size = verts.size();
@@ -171,7 +177,7 @@ void NonplanarPolygon::compute_bounds()
   bounds = bnds;
 }
 
-void NonplanarPolygon::apply_transform(const Transform &tfm, const bool apply_to_motion)
+void NonplanarPolygonMesh::apply_transform(const Transform &tfm, const bool apply_to_motion)
 {
   transform_normal = transform_transposed_inverse(tfm);
 
@@ -205,7 +211,7 @@ void NonplanarPolygon::apply_transform(const Transform &tfm, const bool apply_to
   }
 }
 
-void NonplanarPolygon::add_undisplaced()
+void NonplanarPolygonMesh::add_undisplaced()
 {
   AttributeSet &attrs = attributes;
 
@@ -228,12 +234,12 @@ void NonplanarPolygon::add_undisplaced()
   }
 }
 
-void NonplanarPolygon::pack_shaders(Scene *scene, uint *tri_shader)
+void NonplanarPolygonMesh::pack_shaders(Scene *scene, uint *tri_shader)
 {
   uint shader_id = 0;
   uint last_shader = -1;
 
-  size_t triangles_size = 1;
+  size_t triangles_size = face_starts.size();
   const int *shader_ptr = shader.data();
 
   for (size_t i = 0; i < triangles_size; i++) {
@@ -251,20 +257,25 @@ void NonplanarPolygon::pack_shaders(Scene *scene, uint *tri_shader)
   }
 }
 
-void NonplanarPolygon::pack_verts(packed_float3 *tri_verts, packed_uint3 *tri_vindex)
+void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tri_vindex)
 {
-  size_t verts_size = verts.size();
-  size_t triangles_size = 1;
-  float3 pt_sum = make_float3(0, 0, 0);
-  for (size_t i = 0; i < verts_size; i++) {
-    tri_verts[i] = verts[i];
-    pt_sum += verts[i];
+  size_t triangles_size = face_starts.size();
+  uint v_id = 0;
+  for (uint j = 0; j < triangles_size; j++) {
+    uint v_start = v_id;
+    float3 pt_sum = make_float3(0, 0, 0);
+    for (size_t i = 0; i < face_sizes[j]; i++) {
+      tri_verts[v_id] = verts[face_starts[j] + i];
+      pt_sum += verts[face_starts[j] + i];
+      v_id++;
+    }
+    tri_verts[v_id] = pt_sum / face_sizes[j];
+    v_id++;
+    tri_vindex[j] = make_packed_uint3(vert_offset + v_start, face_sizes[j], 0);
   }
-  tri_verts[verts_size] = pt_sum / verts_size;
-  tri_vindex[0] = make_packed_uint3(vert_offset, verts_size, 0);
 }
 
-PrimitiveType NonplanarPolygon::primitive_type() const
+PrimitiveType NonplanarPolygonMesh::primitive_type() const
 {
   return has_motion_blur() ? PRIMITIVE_MOTION_TRIANGLE : PRIMITIVE_TRIANGLE;
 }

@@ -83,11 +83,11 @@ void GeometryManager::device_update_mesh(Device *,
       PointCloud *pointcloud = static_cast<PointCloud *>(geom);
       point_size += pointcloud->num_points();
     }
-    else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
-      NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+    else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+      NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
 
-      vert_size += nonplanar_polygon->verts.size() + 1;
-      tri_size += 1;
+      vert_size += mesh->vert_space();
+      tri_size += mesh->prim_space();
     }
   }
 
@@ -135,16 +135,15 @@ void GeometryManager::device_update_mesh(Device *,
         if (progress.get_cancel())
           return;
       }
-      else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
-        NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+      else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+        NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
 
-        if (nonplanar_polygon->shader_is_modified() || copy_all_data) {
-          nonplanar_polygon->pack_shaders(scene, &tri_shader[nonplanar_polygon->prim_offset]);
+        if (mesh->shader_is_modified() || copy_all_data) {
+          mesh->pack_shaders(scene, &tri_shader[mesh->prim_offset]);
         }
 
-        if (nonplanar_polygon->verts_is_modified() || copy_all_data) {
-          nonplanar_polygon->pack_verts(&tri_verts[nonplanar_polygon->vert_offset],
-                                        &tri_vindex[nonplanar_polygon->prim_offset]);
+        if (mesh->verts_is_modified() || copy_all_data) {
+          mesh->pack_verts(&tri_verts[mesh->vert_offset], &tri_vindex[mesh->prim_offset]);
         }
 
         if (progress.get_cancel())

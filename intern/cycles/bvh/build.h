@@ -28,7 +28,7 @@ class InnerNode;
 class Geometry;
 class Hair;
 class Mesh;
-class NonplanarPolygon;
+class NonplanarPolygonMesh;
 class Object;
 class PointCloud;
 class Progress;
@@ -59,10 +59,10 @@ class BVHBuild {
 
   /* Adding references. */
   void add_reference_triangles(BoundBox &root, BoundBox &center, Mesh *mesh, int i);
-  void add_reference_nonplanar_polygon(BoundBox &root,
-                                       BoundBox &center,
-                                       NonplanarPolygon *nonplanar_polygon,
-                                       int object_index);
+  void add_reference_nonplanar_polygons(BoundBox &root,
+                                        BoundBox &center,
+                                        NonplanarPolygonMesh *mesh,
+                                        int object_index);
   void add_reference_curves(BoundBox &root, BoundBox &center, Hair *hair, int i);
   void add_reference_points(BoundBox &root, BoundBox &center, PointCloud *pointcloud, int i);
   void add_reference_geometry(BoundBox &root, BoundBox &center, Geometry *geom, int i);

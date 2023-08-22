@@ -338,16 +338,16 @@ void GeometryManager::geom_calc_offset(Scene *scene, BVHLayout bvh_layout)
       pointcloud->prim_offset = point_size;
       point_size += pointcloud->num_points();
     }
-    else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
-      NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+    else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+      NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
 
-      prim_offset_changed = (nonplanar_polygon->prim_offset != tri_size);
+      prim_offset_changed = (mesh->prim_offset != tri_size);
 
-      nonplanar_polygon->vert_offset = vert_size;
-      nonplanar_polygon->prim_offset = tri_size;
+      mesh->vert_offset = vert_size;
+      mesh->prim_offset = tri_size;
 
-      vert_size += nonplanar_polygon->verts.size() + 1;
-      tri_size += 1;
+      vert_size += mesh->vert_space();
+      tri_size += mesh->prim_space();
     }
 
     if (prim_offset_changed) {

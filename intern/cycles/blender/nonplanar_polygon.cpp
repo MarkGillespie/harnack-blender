@@ -134,19 +134,17 @@ static void fill_generic_attribute(BL::Mesh &b_mesh,
   }
 }
 
-static void attr_create_generic(Scene *scene,
-                                NonplanarPolygon *nonplanar_polygon,
-                                BL::Mesh &b_mesh)
+static void attr_create_generic(Scene *scene, NonplanarPolygonMesh *mesh, BL::Mesh &b_mesh)
 {
-  AttributeSet &attributes = nonplanar_polygon->attributes;
+  AttributeSet &attributes = mesh->attributes;
   const ustring default_color_name{b_mesh.attributes.default_color_name().c_str()};
 
   for (BL::Attribute &b_attribute : b_mesh.attributes) {
     const ustring name{b_attribute.name().c_str()};
     const bool is_render_color = name == default_color_name;
 
-    if (!(nonplanar_polygon->need_attribute(scene, name) ||
-          (is_render_color && nonplanar_polygon->need_attribute(scene, ATTR_STD_VERTEX_COLOR))))
+    if (!(mesh->need_attribute(scene, name) ||
+          (is_render_color && mesh->need_attribute(scene, ATTR_STD_VERTEX_COLOR))))
     {
       continue;
     }
@@ -356,81 +354,95 @@ static const int *find_material_index_attribute(BL::Mesh b_mesh)
   return nullptr;
 }
 
-static void create_nonplanar_polygon(Scene *scene,
-                                     NonplanarPolygon *nonplanar_polygon,
-                                     BL::Mesh &b_mesh,
-                                     const array<Node *> &used_shaders,
-                                     const bool need_motion,
-                                     const float motion_scale,
-                                     const bool subdivision = false,
-                                     const bool subdivide_uvs = true)
+static void create_nonplanar_polygon_mesh(Scene *scene,
+                                          NonplanarPolygonMesh *mesh,
+                                          BL::Mesh &b_mesh,
+                                          const array<Node *> &used_shaders,
+                                          const bool need_motion,
+                                          const float motion_scale,
+                                          const bool subdivision = false,
+                                          const bool subdivide_uvs = true)
 {
   int numfaces = b_mesh.polygons.length();
 
-  /* If no faces, create empty nonplanar polygon. */
+  // If no faces, create empty nonplanar polygon.
   if (numfaces == 0) {
     return;
   }
-
-  numfaces = 1;  // only keep one face
 
   const float(*positions)[3] = static_cast<const float(*)[3]>(b_mesh.vertices[0].ptr.data);
   const int *face_offsets = static_cast<const int *>(b_mesh.polygons[0].ptr.data);
   const int *corner_verts = find_corner_vert_attribute(b_mesh);
 
-  const int numverts = face_offsets[1] - face_offsets[0];
-
-  /* allocate memory */
-  nonplanar_polygon->resize_nonplanar_polygon(numverts);
-
-  float3 *verts = nonplanar_polygon->get_verts().data();
-  for (int iV = 0; iV < numverts; iV++) {
-    int v = corner_verts[face_offsets[0] + iV];
-    verts[iV] = make_float3(positions[v][0], positions[v][1], positions[v][2]);
+  // store each corner separately
+  int numverts = 0;
+  for (uint j = 0; j < numfaces; j++) {
+    int face_size = face_offsets[j + 1] - face_offsets[j];
+    numverts += face_size;
   }
 
-  AttributeSet &attributes = nonplanar_polygon->attributes;
+  // allocate memory
+  mesh->resize_nonplanar_polygon(numverts, numfaces);
+
+  float3 *verts = mesh->get_verts().data();
+  int *face_starts = mesh->get_face_starts().data();
+  int *face_sizes = mesh->get_face_sizes().data();
+  uint iV = 0;
+  for (uint j = 0; j < numfaces; j++) {
+    int face_size = face_offsets[j + 1] - face_offsets[j];
+    for (int i = 0; i < face_size; i++) {
+      int v = corner_verts[face_offsets[j] + i];
+      verts[iV] = make_float3(positions[v][0], positions[v][1], positions[v][2]);
+      iV++;
+    }
+    face_starts[j] = face_offsets[j];
+    face_sizes[j] = face_size;
+  }
+
+  AttributeSet &attributes = mesh->attributes;
 
   auto clamp_material_index = [&](const int material_index) -> int {
     return clamp(material_index, 0, used_shaders.size() - 1);
   };
 
-  int *shader = nonplanar_polygon->get_shader().data();
+  // assign shaders
+  int *shader = mesh->get_shader().data();
 
   const int *material_indices = find_material_index_attribute(b_mesh);
   if (material_indices) {
-    const int *looptri_faces = static_cast<const int *>(b_mesh.loop_triangle_polygons[0].ptr.data);
-    shader[0] = clamp_material_index(material_indices[looptri_faces[0]]);
+    for (int i = 0; i < numfaces; i++) {
+      shader[i] = clamp_material_index(material_indices[i]);
+    }
   }
   else {
-    std::fill(shader, shader + 1, 0);
+    std::fill(shader, shader + numfaces, 0);
   }
 
-  nonplanar_polygon->tag_shader_modified();
+  mesh->tag_shader_modified();
 
   /* Create all needed attributes.
    * The calculate functions will check whether they're needed or not.
    */
-  attr_create_generic(scene, nonplanar_polygon, b_mesh);
+  attr_create_generic(scene, mesh, b_mesh);
 }
 
 /* Sync */
 
-void BlenderSync::sync_nonplanar_polygon(BL::Depsgraph b_depsgraph,
-                                         BObjectInfo &b_ob_info,
-                                         NonplanarPolygon *nonplanar_polygon)
+void BlenderSync::sync_nonplanar_polygon_mesh(BL::Depsgraph b_depsgraph,
+                                              BObjectInfo &b_ob_info,
+                                              NonplanarPolygonMesh *mesh)
 {
   /* make a copy of the shaders as the caller in the main thread still need them for syncing the
    * attributes */
-  array<Node *> used_shaders = nonplanar_polygon->get_used_shaders();
+  array<Node *> used_shaders = mesh->get_used_shaders();
 
-  NonplanarPolygon new_nonplanar_polygon;
-  new_nonplanar_polygon.set_used_shaders(used_shaders);
+  NonplanarPolygonMesh new_mesh;
+  new_mesh.set_used_shaders(used_shaders);
 
   if (view_layer.use_surfaces) {
 
-    /* For some reason, meshes do not need this... */
-    bool need_undeformed = new_nonplanar_polygon.need_attribute(scene, ATTR_STD_GENERATED);
+    // For some reason, meshes do not need this...
+    bool need_undeformed = new_mesh.need_attribute(scene, ATTR_STD_GENERATED);
     BL::Mesh b_mesh = object_to_mesh(
         b_data, b_ob_info, b_depsgraph, need_undeformed, Mesh::SUBDIVISION_NONE);
 
@@ -438,14 +450,9 @@ void BlenderSync::sync_nonplanar_polygon(BL::Depsgraph b_depsgraph,
       const bool need_motion = false;
       const float motion_scale = 0.f;
 
-      /* Sync nonplanar_polygon itself. */
-      create_nonplanar_polygon(scene,
-                               &new_nonplanar_polygon,
-                               b_mesh,
-                               new_nonplanar_polygon.get_used_shaders(),
-                               need_motion,
-                               motion_scale,
-                               false);
+      // Sync mesh itself.
+      create_nonplanar_polygon_mesh(
+          scene, &new_mesh, b_mesh, new_mesh.get_used_shaders(), need_motion, motion_scale, false);
 
       free_object_to_mesh(b_data, b_ob_info, b_mesh);
     }
@@ -453,24 +460,24 @@ void BlenderSync::sync_nonplanar_polygon(BL::Depsgraph b_depsgraph,
 
   /* update original sockets */
 
-  nonplanar_polygon->clear_non_sockets();
+  mesh->clear_non_sockets();
 
-  for (const SocketType &socket : new_nonplanar_polygon.type->inputs) {
+  for (const SocketType &socket : new_mesh.type->inputs) {
     /* Those sockets are updated in sync_object, so do not modify them. */
     if (socket.name == "use_motion_blur" || socket.name == "motion_steps" ||
         socket.name == "used_shaders")
     {
       continue;
     }
-    nonplanar_polygon->set_value(socket, new_nonplanar_polygon, socket);
+    mesh->set_value(socket, new_mesh, socket);
   }
 
-  nonplanar_polygon->attributes.update(std::move(new_nonplanar_polygon.attributes));
+  mesh->attributes.update(std::move(new_mesh.attributes));
 
   /* tag update */
-  bool rebuild = false;  // TODO: need to check something
+  bool rebuild = (mesh->face_starts_is_modified());
 
-  nonplanar_polygon->tag_update(scene, rebuild);
+  mesh->tag_update(scene, rebuild);
 }
 
 CCL_NAMESPACE_END

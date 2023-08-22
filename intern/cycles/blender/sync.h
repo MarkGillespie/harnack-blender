@@ -33,7 +33,7 @@ class Film;
 class Hair;
 class Light;
 class Mesh;
-class NonplanarPolygon;
+class NonplanarPolygonMesh;
 class Object;
 class ParticleSystem;
 class Scene;
@@ -156,9 +156,9 @@ class BlenderSync {
                         int motion_step);
 
   /* Nonplanar Polygon */
-  void sync_nonplanar_polygon(BL::Depsgraph b_depsgraph,
-                              BObjectInfo &b_ob_info,
-                              NonplanarPolygon *nonplanar_polygon);
+  void sync_nonplanar_polygon_mesh(BL::Depsgraph b_depsgraph,
+                                   BObjectInfo &b_ob_info,
+                                   NonplanarPolygonMesh *mesh);
 
   /* Hair */
   void sync_hair(BL::Depsgraph b_depsgraph, BObjectInfo &b_ob_info, Hair *hair);

@@ -27,7 +27,6 @@ class Attribute;
 class BVH;
 class Device;
 class DeviceScene;
-class NonplanarPolygon;
 class Progress;
 class RenderStats;
 class Scene;
@@ -37,18 +36,30 @@ struct SubdParams;
 class DiagSplit;
 struct PackedPatchTable;
 
-/* NonplanarPolygon */
+/* Nonplanar polygon mesh */
 
-class NonplanarPolygon : public Geometry {
+class NonplanarPolygonMesh : public Geometry {
  protected:
-  NonplanarPolygon(const NodeType *node_type_, Type geom_type_);
+  NonplanarPolygonMesh(const NodeType *node_type_, Type geom_type_);
 
  public:
   NODE_DECLARE
 
   /* NonplanarPolygon Data */
   NODE_SOCKET_API_ARRAY(array<float3>, verts)
+  NODE_SOCKET_API_ARRAY(array<int>, face_starts)
+  NODE_SOCKET_API_ARRAY(array<int>, face_sizes)
   NODE_SOCKET_API_ARRAY(array<int>, shader)
+
+  size_t prim_space() const
+  {
+    return face_starts.size();
+  }
+
+  size_t vert_space() const
+  {
+    return verts.size() + face_starts.size();
+  }
 
  private:
   /* BVH */
@@ -68,11 +79,11 @@ class NonplanarPolygon : public Geometry {
 
  public:
   /* Functions */
-  NonplanarPolygon();
-  ~NonplanarPolygon();
+  NonplanarPolygonMesh();
+  ~NonplanarPolygonMesh();
 
-  void resize_nonplanar_polygon(int numverts);
-  void reserve_nonplanar_polygon(int numverts);
+  void resize_nonplanar_polygon(int numverts, int numfaces);
+  void reserve_nonplanar_polygon(int numverts, int numfaces);
   void clear_non_sockets();
   void clear(bool preserve_shaders = false) override;
   void add_vertex(float3 P);
