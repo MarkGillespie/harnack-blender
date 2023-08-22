@@ -1317,11 +1317,6 @@ static void create_subd_mesh(Scene *scene,
 void BlenderSync::sync_mesh(BL::Depsgraph b_depsgraph, BObjectInfo &b_ob_info, Mesh *mesh)
 {
 
-  HERE();
-  foreach (Geometry *geom, scene->geometry) {
-    HERE();
-  }
-
   /* make a copy of the shaders as the caller in the main thread still need them for syncing the
    * attributes */
   array<Node *> used_shaders = mesh->get_used_shaders();
@@ -1371,10 +1366,6 @@ void BlenderSync::sync_mesh(BL::Depsgraph b_depsgraph, BObjectInfo &b_ob_info, M
                     false);
 
       free_object_to_mesh(b_data, b_ob_info, b_mesh);
-    }
-    HERE();
-    foreach (Geometry *geom, scene->geometry) {
-      HERE();
     }
   }
 

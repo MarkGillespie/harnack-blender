@@ -36,8 +36,19 @@ static Geometry::Type determine_geom_type(BObjectInfo &b_ob_info, bool use_parti
     return Geometry::VOLUME;
   }
 
-  return Geometry::NONPLANAR_POLYGON_MESH;
-  // return Geometry::MESH;
+  // check if mesh has nonplanar polygon attribute, i.e. an attribute starting with 'HARNACK'
+  BL::Mesh b_mesh(b_ob_info.object_data);
+  if (b_mesh) {
+    std::string tag = "HARNACK";
+    for (BL::Attribute &b_attribute : b_mesh.attributes) {
+      const std::string name = b_attribute.name();
+      if (!name.compare(0, tag.size(), tag)) {  // check if name begins with tag
+        return Geometry::NONPLANAR_POLYGON_MESH;
+      }
+    }
+  }
+
+  return Geometry::MESH;
 }
 
 array<Node *> BlenderSync::find_used_shaders(BL::Object &b_ob)
