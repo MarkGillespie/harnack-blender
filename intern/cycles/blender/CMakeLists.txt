@@ -26,6 +26,7 @@ set(SRC
   light.cpp
   light_linking.cpp
   mesh.cpp
+  nonplanar_polygon.cpp
   object.cpp
   object_cull.cpp
   output_driver.cpp

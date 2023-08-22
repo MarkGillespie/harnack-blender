@@ -15,11 +15,13 @@
 #include "scene/curves.h"
 #include "scene/hair.h"
 #include "scene/mesh.h"
+#include "scene/nonplanar_polygon.h"
 #include "scene/object.h"
 #include "scene/pointcloud.h"
 #include "scene/scene.h"
 
 #include "util/algorithm.h"
+#include "util/debug.h"
 #include "util/foreach.h"
 #include "util/log.h"
 #include "util/progress.h"
@@ -353,6 +355,31 @@ void BVHBuild::add_reference_points(BoundBox &root,
   }
 }
 
+void BVHBuild::add_reference_nonplanar_polygon(BoundBox &root,
+                                               BoundBox &center,
+                                               NonplanarPolygon *nonplanar_polygon,
+                                               int object_index)
+{
+  const PrimitiveType primitive_type = PRIMITIVE_NONPLANAR_POLYGON;
+  const Attribute *attr_mP = NULL;
+  const size_t num_triangles = 1;
+  const float3 *verts = &nonplanar_polygon->verts[0];
+  for (uint j = 0; j < num_triangles; j++) {
+    if (attr_mP == NULL) {
+      BoundBox bounds = BoundBox::empty;
+      const size_t num_verts = nonplanar_polygon->verts.size();
+      for (uint j = 0; j < num_verts; j++) {
+        bounds.grow(verts[j]);
+      }
+      if (bounds.valid()) {
+        references.push_back(BVHReference(bounds, 0, object_index, primitive_type));
+        root.grow(bounds);
+        center.grow(bounds.center2());
+      }
+    }
+  }
+}
+
 void BVHBuild::add_reference_geometry(BoundBox &root,
                                       BoundBox &center,
                                       Geometry *geom,
@@ -369,6 +396,10 @@ void BVHBuild::add_reference_geometry(BoundBox &root,
   else if (geom->geometry_type == Geometry::POINTCLOUD) {
     PointCloud *pointcloud = static_cast<PointCloud *>(geom);
     add_reference_points(root, center, pointcloud, object_index);
+  }
+  else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
+    NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+    add_reference_nonplanar_polygon(root, center, nonplanar_polygon, object_index);
   }
 }
 
@@ -402,6 +433,9 @@ static size_t count_primitives(Geometry *geom)
   else if (geom->geometry_type == Geometry::POINTCLOUD) {
     PointCloud *pointcloud = static_cast<PointCloud *>(geom);
     return pointcloud->num_points();
+  }
+  else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
+    return 1;
   }
 
   return 0;

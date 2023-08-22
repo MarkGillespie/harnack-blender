@@ -5,6 +5,10 @@
 #ifndef __UTIL_MATH_INTERSECT_H__
 #define __UTIL_MATH_INTERSECT_H__
 
+#include <complex>
+#include <iostream>
+#include <vector>
+
 CCL_NAMESPACE_BEGIN
 
 /* Ray Intersection */
@@ -300,6 +304,177 @@ ccl_device bool ray_quad_intersect(float3 ray_P,
     *isect_v = -u - v;
 
   return true;
+}
+
+/* Tests for an intersection between a ray and a nonplanar polygon defined as
+ * the 2 PI levelset of the solid angle function.
+ * Comptutes the intersection via Harnack tracing
+ */
+ccl_device bool ray_nonplanar_polygon_intersect(const float3 ray_P,
+                                                const float3 ray_D,
+                                                const float ray_tmin,
+                                                const float ray_tmax,
+                                                const packed_float3 *tri_pts,
+                                                const size_t N,
+                                                ccl_private float *isect_u,
+                                                ccl_private float *isect_v,
+                                                ccl_private float *isect_t)
+{
+  int max_iterations = 1500;
+  float epsilon = 0.0001;
+  float shift = 4. * M_PI;
+
+  if (N < 3)
+    return false;
+
+  /* std::string info = "intersecting: " + std::to_string(N); */
+  /* for (size_t i = 0; i < N; i++) { */
+  /*   info += " | " + std::to_string(tri_pts[i].x) + " " + std::to_string(tri_pts[i].y) + " " + */
+  /*           std::to_string(tri_pts[i].z); */
+  /* } */
+  /* info += "\n"; */
+  /* std::cout << info; */
+
+  /* return false; */
+
+  float3 center = zero_float3();
+  for (size_t i = 0; i < N; i++)
+    center += tri_pts[i];
+  center /= N;
+
+  // TODO: try doubles?
+  auto close_to_zero = [&](float ang) -> bool {
+    // Check if an angle is within epsilon of 0 (or 4π)
+    float dis = fmin(ang, (float)(4 * M_PI) - ang);
+    float tolScaling = 1;  // useGradStoppingCriterion ? Length(grad) : 1;
+    return dis < epsilon * tolScaling;
+  };
+
+  auto distance_to_boundary = [&](const float3 &x, float3 *closest_point) -> float {
+    // TODO maybe replace with numeric_limits<float>::infinity()?
+    const float infinity = 100000.f;
+    float min_d2 = infinity;
+
+    // compute closest distance to each polygon line segment
+    for (int i = 0; i < N; i++) {  // set up loop bounds so that it doesn't run if pts is empty
+      float3 p1 = tri_pts[i];
+      float3 p2 = tri_pts[(i + 1) % N];
+      float3 m = p2 - p1;
+      float3 v = x - p1;
+      // dot = |a|*|b|cos(theta) * n, isolating |a|sin(theta)
+      float t = fmin(fmax(dot(m, v) / dot(m, m), 0.), 1.);
+      float d2 = len_squared(v - t * m);
+      // if closestPoint is not null, update it to track closest point
+      if (closest_point && d2 < min_d2)
+        *closest_point = p1 + t * m;
+      min_d2 = fmin(min_d2, d2);
+    }
+
+    return std::sqrt(min_d2);
+  };
+
+  // Computes a conservative step size via Harnack bounds, using the value
+  // fx at the current point, the radius R of a ball over which the function is
+  // harmonic, the values lo_bound and up_bound of the closest level sets above/
+  // below the current value, and a shift that makes the harmonic function
+  // positive within this ball.
+  auto get_max_step =
+      [&](float fx, float R, float lo_bound, float up_bound, float shift) -> float {
+    float w = (fx + shift) / (up_bound + shift);
+    float v = (fx + shift) / (lo_bound + shift);
+    float lo_r = -R / 2 * (v + 2 - std::sqrt(v * v + 8 * v));
+    float up_r = R / 2 * (w + 2 - std::sqrt(w * w + 8 * w));
+
+    return std::min(lo_r, up_r);
+  };
+
+  auto solid_angle = [&](const float3 &x) -> float {
+    // compute the vectors xp from the evaluation point x
+    // to all the polygon vertices, and their lengths Lp
+    std::vector<float3> xp;
+    xp.reserve(N + 1);
+    std::vector<float> Lp;
+    Lp.reserve(N + 1);
+    for (int i = 0; i < N + 1; i++) {
+      xp.push_back(tri_pts[i] - x);
+      Lp.push_back(len(xp[i]));
+    }
+    xp.push_back(center - x);
+    Lp.push_back(len(xp[N]));
+
+    // Iterate over triangles used to triangulate the polygon
+    std::complex<float> running_angle{1., 0.};
+    for (int i = 0; i < N; i++) {
+      int a = i;
+      int b = (i + 1) % N;
+      int c = N;
+
+      // Add the solid angle of this triangle to the total
+      std::complex<float> tri_angle{Lp[a] * Lp[b] * Lp[c] + dot(xp[a], xp[b]) * Lp[c] +
+                                        dot(xp[b], xp[c]) * Lp[a] + dot(xp[a], xp[c]) * Lp[b],
+                                    dot(xp[a], cross(xp[b], xp[c]))};
+      running_angle *= tri_angle;
+    }
+    return 2 * std::arg(running_angle);
+  };
+
+  /* Find intersection with Harnack tracing */
+
+  float t = ray_tmin;
+  int iter = 0;
+  float lo_bound = 0;
+  float hi_bound = 4. * M_PI;
+
+  float ld = len(ray_D);
+
+  static bool exceeded_max = false;
+  while (t < ray_tmax) {
+    float3 pos = ray_P + t * ray_D;
+
+    // If we've exceeded the maximum number of iterations,
+    // print a warning
+    if (iter > max_iterations) {
+      if (!exceeded_max) {
+        exceeded_max = true;
+        printf("Warning: exceeded maximum number of Harnack iterations.\n");
+      }
+
+      return false;
+    }
+
+    float val = solid_angle(pos);
+
+    // Calculate the radius of a ball around the current point over which
+    // we know the function is harmonic.  An easy way to identify such a
+    // ball is to restrict to the sphere touching the closest point on the
+    // polygon boundary.
+    float3 closestPoint;
+    float R = distance_to_boundary(pos, &closestPoint);
+
+    // If we're close enough to the level set, or we've exceeded the
+    // maximum number of iterations, assume there's a hit.
+    if (close_to_zero(val) || R < epsilon || iter > max_iterations) {
+      // if (R < epsilon)   grad = pos - closestPoint; // TODO: this?
+      /* std::string info = "hit info | val: " + std::to_string(val) + "\n"; */
+      /* std::cout << info; */
+      *isect_t = t;
+      *isect_u = 0;
+      *isect_v = 0;
+      return true;
+    }
+    else {
+      /* std::string info = "not hit info | val: " + std::to_string(val) + */
+      /*                    ", iter: " + std::to_string(iter) + "\n"; */
+      /* std::cout << info; */
+    }
+
+    // Compute a conservative step size based on the Harnack bound.
+    float r = get_max_step(val, R, lo_bound, hi_bound, shift);
+    t += r / ld;
+    iter++;
+  }
+
+  return false;
 }
 
 CCL_NAMESPACE_END

@@ -19,6 +19,7 @@
 
 #include "util/algorithm.h"
 #include "util/color.h"
+#include "util/debug.h"
 #include "util/disjoint_set.h"
 #include "util/foreach.h"
 #include "util/hash.h"
@@ -1315,6 +1316,12 @@ static void create_subd_mesh(Scene *scene,
 
 void BlenderSync::sync_mesh(BL::Depsgraph b_depsgraph, BObjectInfo &b_ob_info, Mesh *mesh)
 {
+
+  HERE();
+  foreach (Geometry *geom, scene->geometry) {
+    HERE();
+  }
+
   /* make a copy of the shaders as the caller in the main thread still need them for syncing the
    * attributes */
   array<Node *> used_shaders = mesh->get_used_shaders();
@@ -1364,6 +1371,10 @@ void BlenderSync::sync_mesh(BL::Depsgraph b_depsgraph, BObjectInfo &b_ob_info, M
                     false);
 
       free_object_to_mesh(b_data, b_ob_info, b_mesh);
+    }
+    HERE();
+    foreach (Geometry *geom, scene->geometry) {
+      HERE();
     }
   }
 
@@ -1462,7 +1473,8 @@ void BlenderSync::sync_mesh_motion(BL::Depsgraph b_depsgraph,
     if (new_attribute) {
       /* In case of new attribute, we verify if there really was any motion. */
       if (b_verts_num != numverts ||
-          memcmp(mP, &mesh->get_verts()[0], sizeof(float3) * numverts) == 0) {
+          memcmp(mP, &mesh->get_verts()[0], sizeof(float3) * numverts) == 0)
+      {
         /* no motion, remove attributes again */
         if (b_verts_num != numverts) {
           VLOG_WARNING << "Topology differs, disabling motion blur for object " << ob_name;

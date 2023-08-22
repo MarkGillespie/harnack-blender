@@ -5,6 +5,7 @@
 #include "scene/curves.h"
 #include "scene/hair.h"
 #include "scene/mesh.h"
+#include "scene/nonplanar_polygon.h"
 #include "scene/object.h"
 #include "scene/pointcloud.h"
 #include "scene/volume.h"
@@ -12,6 +13,7 @@
 #include "blender/sync.h"
 #include "blender/util.h"
 
+#include "util/debug.h"
 #include "util/foreach.h"
 #include "util/task.h"
 
@@ -34,7 +36,8 @@ static Geometry::Type determine_geom_type(BObjectInfo &b_ob_info, bool use_parti
     return Geometry::VOLUME;
   }
 
-  return Geometry::MESH;
+  return Geometry::NONPLANAR_POLYGON;
+  // return Geometry::MESH;
 }
 
 array<Node *> BlenderSync::find_used_shaders(BL::Object &b_ob)
@@ -103,6 +106,9 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
     else if (geom_type == Geometry::POINTCLOUD) {
       geom = scene->create_node<PointCloud>();
     }
+    else if (geom_type == Geometry::NONPLANAR_POLYGON) {
+      geom = scene->create_node<NonplanarPolygon>();
+    }
     else {
       geom = scene->create_node<Mesh>();
     }
@@ -165,6 +171,10 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
     else if (geom_type == Geometry::POINTCLOUD) {
       PointCloud *pointcloud = static_cast<PointCloud *>(geom);
       sync_pointcloud(pointcloud, b_ob_info);
+    }
+    else if (geom_type == Geometry::NONPLANAR_POLYGON) {
+      NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+      sync_nonplanar_polygon(b_depsgraph, b_ob_info, nonplanar_polygon);
     }
     else {
       Mesh *mesh = static_cast<Mesh *>(geom);

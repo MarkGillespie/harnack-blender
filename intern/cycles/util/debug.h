@@ -6,10 +6,17 @@
 #define __UTIL_DEBUG_H__
 
 #include <cassert>
+#include <iostream>
 
 #include "bvh/params.h"
 
 CCL_NAMESPACE_BEGIN
+
+#define HERE() \
+  do { \
+    std::cout << "HERE at " << __LINE__ << " in " << __FILE__ << ":" << __FUNCTION__ \
+              << std::endl; \
+  } while (false)
 
 /* Global storage for all sort of flags used to fine-tune behavior of particular
  * areas for the development purposes, without officially exposing settings to

@@ -33,6 +33,7 @@ class LightManager;
 class LookupTables;
 class Geometry;
 class GeometryManager;
+class NonplanarPolygon;
 class Object;
 class ObjectManager;
 class ParticleSystemManager;
@@ -274,6 +275,8 @@ class Scene : public NodeOwner {
 template<> Light *Scene::create_node<Light>();
 
 template<> Mesh *Scene::create_node<Mesh>();
+
+template<> NonplanarPolygon *Scene::create_node<NonplanarPolygon>();
 
 template<> Object *Scene::create_node<Object>();
 

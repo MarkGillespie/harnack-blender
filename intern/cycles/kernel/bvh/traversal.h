@@ -156,6 +156,24 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals kg,
                 }
                 break;
               }
+              case PRIMITIVE_NONPLANAR_POLYGON: {
+                if (nonplanar_polygon_intersect(kg,
+                                                isect,
+                                                P,
+                                                dir,
+                                                tmin,
+                                                isect->t,
+                                                visibility,
+                                                prim_object,
+                                                prim,
+                                                prim_addr))
+                {
+                  /* shadow ray early termination */
+                  if (visibility & PATH_RAY_SHADOW_OPAQUE)
+                    return true;
+                }
+                break;
+              }
 #if BVH_FEATURE(BVH_MOTION)
               case PRIMITIVE_MOTION_TRIANGLE: {
                 if (motion_triangle_intersect(kg,

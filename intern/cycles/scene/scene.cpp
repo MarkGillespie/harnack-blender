@@ -16,6 +16,7 @@
 #include "scene/integrator.h"
 #include "scene/light.h"
 #include "scene/mesh.h"
+#include "scene/nonplanar_polygon.h"
 #include "scene/object.h"
 #include "scene/osl.h"
 #include "scene/particles.h"
@@ -726,6 +727,15 @@ template<> Mesh *Scene::create_node<Mesh>()
   node->set_owner(this);
   geometry.push_back(node);
   geometry_manager->tag_update(this, GeometryManager::MESH_ADDED);
+  return node;
+}
+
+template<> NonplanarPolygon *Scene::create_node<NonplanarPolygon>()
+{
+  NonplanarPolygon *node = new NonplanarPolygon();
+  node->set_owner(this);
+  geometry.push_back(node);
+  geometry_manager->tag_update(this, GeometryManager::NONPLANAR_POLYGON_ADDED);
   return node;
 }
 

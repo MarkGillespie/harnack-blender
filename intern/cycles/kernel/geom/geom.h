@@ -18,6 +18,7 @@
 #include "kernel/geom/motion_triangle_shader.h"
 #include "kernel/geom/motion_curve.h"
 #include "kernel/geom/motion_point.h"
+#include "kernel/geom/nonplanar_polygon_intersect.h"
 #include "kernel/geom/point.h"
 #include "kernel/geom/point_intersect.h"
 #include "kernel/geom/curve.h"

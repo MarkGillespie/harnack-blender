@@ -33,6 +33,7 @@ set(SRC
   mesh.cpp
   mesh_displace.cpp
   mesh_subdivision.cpp
+  nonplanar_polygon.cpp
   procedural.cpp
   pointcloud.cpp
   object.cpp
@@ -72,6 +73,7 @@ set(SRC_HEADERS
   light.h
   light_tree.h
   mesh.h
+  nonplanar_polygon.h
   object.h
   osl.h
   particles.h

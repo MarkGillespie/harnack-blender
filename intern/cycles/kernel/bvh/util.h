@@ -162,6 +162,9 @@ ccl_device_forceinline int intersection_get_shader_from_isect_prim(KernelGlobals
     shader = kernel_data_fetch(curves, prim).shader_id;
   }
 #endif
+  else if (isect_type & PRIMITIVE_NONPLANAR_POLYGON) {
+    shader = kernel_data_fetch(tri_shader, prim);
+  }
 
   return shader & SHADER_MASK;
 }

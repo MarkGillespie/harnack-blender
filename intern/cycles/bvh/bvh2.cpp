@@ -9,6 +9,7 @@
 
 #include "scene/hair.h"
 #include "scene/mesh.h"
+#include "scene/nonplanar_polygon.h"
 #include "scene/object.h"
 #include "scene/pointcloud.h"
 
@@ -419,6 +420,21 @@ void BVH2::refit_primitives(int start, int end, BoundBox &bbox, uint &visibility
 
             for (size_t i = 0; i < steps; i++)
               point.bounds_grow(point_steps + i * pointcloud_size, radius, bbox);
+          }
+        }
+      }
+      else if (pack.prim_type[prim] & PRIMITIVE_NONPLANAR_POLYGON) {
+        /* Nonplanar Polygon */
+        const NonplanarPolygon *nonplanar_polygon = static_cast<const NonplanarPolygon *>(
+            ob->get_geometry());
+        int prim_offset = (params.top_level) ? nonplanar_polygon->prim_offset : 0;
+        const float3 *verts = &nonplanar_polygon->verts[0];
+
+        const size_t num_triangles = 1;
+        for (uint j = 0; j < num_triangles; j++) {
+          const size_t num_verts = nonplanar_polygon->verts.size();
+          for (uint j = 0; j < num_verts; j++) {
+            bbox.grow(verts[j]);
           }
         }
       }

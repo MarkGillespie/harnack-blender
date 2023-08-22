@@ -13,6 +13,7 @@
 #include "scene/hair.h"
 #include "scene/light.h"
 #include "scene/mesh.h"
+#include "scene/nonplanar_polygon.h"
 #include "scene/object.h"
 #include "scene/osl.h"
 #include "scene/pointcloud.h"
@@ -82,6 +83,12 @@ void GeometryManager::device_update_mesh(Device *,
       PointCloud *pointcloud = static_cast<PointCloud *>(geom);
       point_size += pointcloud->num_points();
     }
+    else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
+      NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+
+      vert_size += nonplanar_polygon->verts.size() + 1;
+      tri_size += 1;
+    }
   }
 
   /* Fill in all the arrays. */
@@ -123,6 +130,21 @@ void GeometryManager::device_update_mesh(Device *,
                            &tri_vindex[mesh->prim_offset],
                            &tri_patch[mesh->prim_offset],
                            &tri_patch_uv[mesh->vert_offset]);
+        }
+
+        if (progress.get_cancel())
+          return;
+      }
+      else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
+        NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+
+        if (nonplanar_polygon->shader_is_modified() || copy_all_data) {
+          nonplanar_polygon->pack_shaders(scene, &tri_shader[nonplanar_polygon->prim_offset]);
+        }
+
+        if (nonplanar_polygon->verts_is_modified() || copy_all_data) {
+          nonplanar_polygon->pack_verts(&tri_verts[nonplanar_polygon->vert_offset],
+                                        &tri_vindex[nonplanar_polygon->prim_offset]);
         }
 
         if (progress.get_cancel())

@@ -13,6 +13,7 @@
 #include "scene/hair.h"
 #include "scene/light.h"
 #include "scene/mesh.h"
+#include "scene/nonplanar_polygon.h"
 #include "scene/object.h"
 #include "scene/osl.h"
 #include "scene/pointcloud.h"
@@ -29,6 +30,7 @@
 #  include "kernel/osl/globals.h"
 #endif
 
+#include "util/debug.h"
 #include "util/foreach.h"
 #include "util/log.h"
 #include "util/progress.h"
@@ -335,6 +337,17 @@ void GeometryManager::geom_calc_offset(Scene *scene, BVHLayout bvh_layout)
 
       pointcloud->prim_offset = point_size;
       point_size += pointcloud->num_points();
+    }
+    else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON) {
+      NonplanarPolygon *nonplanar_polygon = static_cast<NonplanarPolygon *>(geom);
+
+      prim_offset_changed = (nonplanar_polygon->prim_offset != tri_size);
+
+      nonplanar_polygon->vert_offset = vert_size;
+      nonplanar_polygon->prim_offset = tri_size;
+
+      vert_size += nonplanar_polygon->verts.size() + 1;
+      tri_size += 1;
     }
 
     if (prim_offset_changed) {

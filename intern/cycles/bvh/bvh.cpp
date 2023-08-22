@@ -97,6 +97,7 @@ BVH *BVH::create(const BVHParams &params,
     case BVH_LAYOUT_EMBREE:
     case BVH_LAYOUT_EMBREEGPU:
 #ifdef WITH_EMBREE
+      throw std::runtime_error("nonplanar polygon rendering requires you to disable embree");
       return new BVHEmbree(params, geometry, objects);
 #else
       break;
