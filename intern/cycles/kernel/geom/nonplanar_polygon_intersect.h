@@ -14,6 +14,8 @@
 
 CCL_NAMESPACE_BEGIN
 
+#define HARNACK_EPS 0.0001
+
 // TODO: move back to math utils?
 template<typename T>
 ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
@@ -46,7 +48,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
   };
 
   int max_iterations = 1500;
-  T epsilon = 0.0001;
+  T epsilon = HARNACK_EPS;
   T shift = 4. * M_PI;
 
   if (N < 3)
@@ -256,30 +258,57 @@ ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,
   auto diff = [](const T3 &a, const T3 &b) -> T3 {
     return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
   };
-  auto diff_f = [](const float3 &a, const T3 &b) -> T3 {
-    return {(T)a.x - b[0], (T)a.y - b[1], (T)a.z - b[2]};
-  };
   // a + s * b
   auto fma = [](const T3 &a, T s, const T3 &b) -> T3 {
     return {a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]};
   };
+  /* auto smoothstep = [](T x, T start, T end) -> T {  // https://docs.gl/sl4/smoothstep */
+  /*   // normalize and clamp to [0, 1] */
+  /*   x = fmin(fmax(((x - start) / (end - start)), 0), 1); */
 
+  /*   return x * x * (3. - 2. * x); */
+  /* }; */
+
+  // find solid angle gradient and closest point on boundary curve
   T3 p = from_float3(pf);
   T3 grad{0, 0, 0};
+  /* , closest_point; */
 
+  /* const T infinity = 100000.; */
+  /* T min_d2 = infinity; */
   for (int i = 0; i < N; i++) {
     T3 p0 = from_float3(pts[(i + 0) % N]);
     T3 p1 = from_float3(pts[(i + 1) % N]);
     T3 g0 = diff(p0, p);
     T3 g1 = diff(p1, p);
+
+    //== compute gradient
     T3 n = cross(g1, g0);
     T n2 = len_squared(n);
     T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) + (-dot(g0, g1) + dot(g1, g1)) / len(g1));
-
     grad[0] -= n[0] / n2 * scale;
     grad[1] -= n[1] / n2 * scale;
     grad[2] -= n[2] / n2 * scale;
+
+    //== find closest point on boundary
+    // dot = |a|*|b|cos(theta) * n, isolating |a|sin(theta)
+    /* T3 m = diff(p1, p0); */
+    /* T3 v = diff(p, p0); */
+    /* T t = fmin(fmax(dot(m, v) / dot(m, m), 0.), 1.); */
+    /* T d2 = len_squared(fma(v, -t, m)); */
+    /* if (d2 < min_d2) */
+    /*   closest_point = fma(p0, t, m); */
+    /* min_d2 = fmin(min_d2, d2); */
   }
+
+  /* T3 offset = diff(p, closest_point); */
+
+  // blend solid angle gradient and offset based on distance to boundary
+  /* T s = smoothstep(min_d2, 0, HARNACK_EPS); */
+  /* s = 0; */
+  /* grad[0] = (1 - s) * offset[0] + s * grad[0]; */
+  /* grad[1] = (1 - s) * offset[1] + s * grad[1]; */
+  /* grad[2] = (1 - s) * offset[2] + s * grad[2]; */
 
   T grad_norm = len(grad);
   grad[0] /= grad_norm;
@@ -292,15 +321,22 @@ ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,
 ccl_device_inline float3
 nonplanar_polygon_normal(KernelGlobals kg,
                          ccl_private ShaderData *sd,
-                         ccl_private const Intersection &ccl_restrict isect)
+                         ccl_private const Intersection *ccl_restrict isect,
+                         ccl_private const Ray *ray)
 {
   /* load vertices */
-  const uint3 polygon_data = kernel_data_fetch(tri_vindex, isect.prim);
+  const uint3 polygon_data = kernel_data_fetch(tri_vindex, isect->prim);
   uint polygon_start = polygon_data.x;
   uint polygon_size = polygon_data.y;
   const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
 
-  float3 normal = ray_nonplanar_polygon_normal_T<double>(sd->P, pts, polygon_size);
+  float3 P = ray->P + isect->t * ray->D;
+  float3 normal = ray_nonplanar_polygon_normal_T<double>(P, pts, polygon_size);
+
+  // HACK: two-sided material
+  /* if (dot(ray->D, normal) < 0) */
+  /*   return -normal; */
+  /* return normal; */
 
   /* return normal */
   if (object_negative_scale_applied(sd->object_flag)) {

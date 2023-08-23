@@ -77,12 +77,12 @@ ccl_device_inline void shader_setup_from_ray(KernelGlobals kg,
     if (sd->type & PRIMITIVE_NONPLANAR_POLYGON) {
       /* nonplanar polygon  */
 
-      // set P first so that nonplanar_polygon_normal can access it
+      float3 Ng = nonplanar_polygon_normal(kg, sd, isect, ray);
+      sd->shader = kernel_data_fetch(tri_shader, sd->prim);
+
       sd->P = ray->P + isect->t * ray->D;
-      float3 Ng = nonplanar_polygon_normal(kg, sd, *isect);
       sd->Ng = Ng;
       sd->N = Ng;
-      sd->shader = kernel_data_fetch(tri_shader, sd->prim);
     }
     else if (sd->type == PRIMITIVE_TRIANGLE) {
       /* static triangle */
