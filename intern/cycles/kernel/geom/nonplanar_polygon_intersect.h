@@ -24,6 +24,8 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
                                                   const float ray_tmax,
                                                   const packed_float3 *pts,
                                                   const size_t N,
+                                                  const float epsilonf,
+                                                  const float levelsetf,
                                                   ccl_private float *isect_u,
                                                   ccl_private float *isect_v,
                                                   ccl_private float *isect_t)
@@ -48,7 +50,8 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
   };
 
   int max_iterations = 1500;
-  T epsilon = HARNACK_EPS;
+  T epsilon = (T)epsilonf;
+  T levelset = (T)levelsetf;
   T shift = 4. * M_PI;
 
   if (N < 3)
@@ -164,7 +167,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
     // representative of the solid angle, shifted by the target level set
     // value, within the range [0,4π).  Only then do we apply the shift.
     // return fmod(angleSum - levelset, 4.f*M_PI) + shift;
-    T val = glsl_mod((double)solid_angle(pos) - 2. * M_PI, 4. * M_PI);
+    T val = glsl_mod((double)solid_angle(pos) - levelset, 4. * M_PI);
 
     // Calculate the radius of a ball around the current point over which
     // we know the function is harmonic.  An easy way to identify such a
@@ -216,9 +219,14 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
   uint polygon_start = polygon_data.x;
   uint N = polygon_data.y;
   const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
+  float3 params = pts[N + 1];
+  float epsilon = params.x;
+  float levelset = params.y * ((float)(4. * M_PI));
 
   float u, v, t;
-  if (ray_nonplanar_polygon_intersect_T<double>(P, dir, tmin, tmax, pts, N, &u, &v, &t)) {
+  if (ray_nonplanar_polygon_intersect_T<double>(
+          P, dir, tmin, tmax, pts, N, epsilon, levelset, &u, &v, &t))
+  {
 #ifdef __VISIBILITY_FLAG__
     /* Visibility flag test. we do it here under the assumption
      * that most triangles are culled by node flags.

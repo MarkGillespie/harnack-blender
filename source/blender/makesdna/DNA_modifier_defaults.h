@@ -301,6 +301,14 @@
 
 /* Fluid modifier settings skipped for now. */
 
+#define _DNA_DEFAULT_HarnackModifierData \
+  { \
+    .epsilon = 0.001, \
+    .levelset = 0.5, \
+    .boundingbox_expansion = 0., \
+    .use_harnack_tracing = true, \
+  }
+
 #define _DNA_DEFAULT_HookModifierData \
   { \
     .subtarget = "", \

@@ -50,6 +50,9 @@ class NonplanarPolygonMesh : public Geometry {
   NODE_SOCKET_API_ARRAY(array<int>, face_starts)
   NODE_SOCKET_API_ARRAY(array<int>, face_sizes)
   NODE_SOCKET_API_ARRAY(array<int>, shader)
+  NODE_SOCKET_API(float, epsilon);
+  NODE_SOCKET_API(float, levelset);
+  NODE_SOCKET_API(float, boundingbox_expansion);
 
   size_t prim_space() const
   {
@@ -58,7 +61,13 @@ class NonplanarPolygonMesh : public Geometry {
 
   size_t vert_space() const
   {
-    return verts.size() + face_starts.size();
+    // store a center point per face, and a set of harnack parameters per face
+    return verts.size() + 2 * face_starts.size();
+  }
+
+  size_t num_faces() const
+  {
+    return face_starts.size();
   }
 
  private:
@@ -92,6 +101,7 @@ class NonplanarPolygonMesh : public Geometry {
   void copy_center_to_motion_step(const int motion_step);
 
   void compute_bounds() override;
+  BoundBox compute_face_bounds(size_t iF) const;
   void apply_transform(const Transform &tfm, const bool apply_to_motion) override;
   void add_undisplaced();
 

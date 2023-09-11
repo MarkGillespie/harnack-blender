@@ -8,6 +8,8 @@
 #include "blender/sync.h"
 #include "blender/util.h"
 
+#include "BKE_attribute.hh"
+
 #include "scene/camera.h"
 #include "scene/colorspace.h"
 #include "scene/nonplanar_polygon.h"
@@ -357,11 +359,7 @@ static const int *find_material_index_attribute(BL::Mesh b_mesh)
 static void create_nonplanar_polygon_mesh(Scene *scene,
                                           NonplanarPolygonMesh *mesh,
                                           BL::Mesh &b_mesh,
-                                          const array<Node *> &used_shaders,
-                                          const bool need_motion,
-                                          const float motion_scale,
-                                          const bool subdivision = false,
-                                          const bool subdivide_uvs = true)
+                                          const array<Node *> &used_shaders)
 {
   int numfaces = b_mesh.polygons.length();
 
@@ -370,6 +368,7 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
     return;
   }
 
+  //== extract mesh geometry
   const float(*positions)[3] = static_cast<const float(*)[3]>(b_mesh.vertices[0].ptr.data);
   const int *face_offsets = static_cast<const int *>(b_mesh.polygons[0].ptr.data);
   const int *corner_verts = find_corner_vert_attribute(b_mesh);
@@ -424,6 +423,41 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
    * The calculate functions will check whether they're needed or not.
    */
   attr_create_generic(scene, mesh, b_mesh);
+
+  //== read off parameter values from attributes if available
+  mesh->set_epsilon(0.0001);
+  mesh->set_levelset(0.5);
+  mesh->set_boundingbox_expansion(0);
+  bool found_epsilon = false, found_levelset = false, found_bounds = false;
+
+  // I don't know why I can't find these attributes using b_mesh.attributes["EPSILON"], but looping
+  // through all the attributes seems to work fine
+  std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS";
+  for (BL::Attribute &b_attribute : b_mesh.attributes) {
+    const ustring name{b_attribute.name().c_str()};
+
+    if (name == epsilon_tag) {
+      found_epsilon = true;
+      BL::FloatAttribute epsilon_attribute{b_attribute};
+      const float *epsilon_data = static_cast<const float *>(epsilon_attribute.data[0].ptr.data);
+      mesh->set_epsilon(epsilon_data[0]);
+    }
+    else if (name == levelset_tag) {
+      found_levelset = true;
+      BL::FloatAttribute levelset_attribute{b_attribute};
+      const float *levelset_data = static_cast<const float *>(levelset_attribute.data[0].ptr.data);
+      mesh->set_levelset(levelset_data[0]);
+    }
+    else if (name == bounds_tag) {
+      found_bounds = true;
+      BL::FloatAttribute bounds_attribute{b_attribute};
+      const float *bounds_data = static_cast<const float *>(bounds_attribute.data[0].ptr.data);
+      mesh->set_boundingbox_expansion(bounds_data[0]);
+    }
+
+    if (found_epsilon && found_levelset && found_bounds)
+      break;
+  }
 }
 
 /* Sync */
@@ -447,12 +481,8 @@ void BlenderSync::sync_nonplanar_polygon_mesh(BL::Depsgraph b_depsgraph,
         b_data, b_ob_info, b_depsgraph, need_undeformed, Mesh::SUBDIVISION_NONE);
 
     if (b_mesh) {
-      const bool need_motion = false;
-      const float motion_scale = 0.f;
-
       // Sync mesh itself.
-      create_nonplanar_polygon_mesh(
-          scene, &new_mesh, b_mesh, new_mesh.get_used_shaders(), need_motion, motion_scale, false);
+      create_nonplanar_polygon_mesh(scene, &new_mesh, b_mesh, new_mesh.get_used_shaders());
 
       free_object_to_mesh(b_data, b_ob_info, b_mesh);
     }

@@ -362,16 +362,8 @@ void BVHBuild::add_reference_nonplanar_polygons(BoundBox &root,
 {
   const PrimitiveType primitive_type = PRIMITIVE_NONPLANAR_POLYGON;
   const size_t num_faces = mesh->prim_space();
-  const float3 *verts = &mesh->verts[0];
-  const int *face_starts = &mesh->face_starts[0];
-  const int *face_sizes = &mesh->face_sizes[0];
   for (uint j = 0; j < num_faces; j++) {
-    BoundBox bounds = BoundBox::empty;
-    const int &face_start = face_starts[j];
-    const int &face_size = face_sizes[j];
-    for (uint k = 0; k < face_size; k++) {
-      bounds.grow(verts[face_start + k]);
-    }
+    BoundBox bounds = mesh->compute_face_bounds(j);
     if (bounds.valid()) {
       references.push_back(BVHReference(bounds, j, object_index, primitive_type));
       root.grow(bounds);

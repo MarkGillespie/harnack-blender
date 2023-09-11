@@ -31,6 +31,9 @@ NODE_DEFINE(NonplanarPolygonMesh)
   SOCKET_INT_ARRAY(face_starts, "Face Starts", array<int>());
   SOCKET_INT_ARRAY(face_sizes, "Face Sizes", array<int>());
   SOCKET_INT_ARRAY(shader, "Shader", array<int>());
+  SOCKET_FLOAT(epsilon, "Epsilon", 0);
+  SOCKET_FLOAT(levelset, "Levelset", 0);
+  SOCKET_FLOAT(boundingbox_expansion, "Bounding Box Expansion", 0);
 
   return type;
 }
@@ -140,33 +143,8 @@ void NonplanarPolygonMesh::compute_bounds()
   size_t verts_size = verts.size();
 
   if (verts_size > 0) {
-    for (size_t i = 0; i < verts_size; i++)
-      bnds.grow(verts[i]);
-
-    Attribute *attr = attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-    if (use_motion_blur && attr) {
-      size_t steps_size = verts.size() * (motion_steps - 1);
-      float3 *vert_steps = attr->data_float3();
-
-      for (size_t i = 0; i < steps_size; i++)
-        bnds.grow(vert_steps[i]);
-    }
-
-    if (!bnds.valid()) {
-      bnds = BoundBox::empty;
-
-      /* skip nan or inf coordinates */
-      for (size_t i = 0; i < verts_size; i++)
-        bnds.grow_safe(verts[i]);
-
-      if (use_motion_blur && attr) {
-        size_t steps_size = verts.size() * (motion_steps - 1);
-        float3 *vert_steps = attr->data_float3();
-
-        for (size_t i = 0; i < steps_size; i++)
-          bnds.grow_safe(vert_steps[i]);
-      }
-    }
+    for (size_t iF = 0; iF < num_faces(); iF++)
+      bnds.grow(compute_face_bounds(iF));
   }
 
   if (!bnds.valid()) {
@@ -175,6 +153,26 @@ void NonplanarPolygonMesh::compute_bounds()
   }
 
   bounds = bnds;
+}
+
+BoundBox NonplanarPolygonMesh::compute_face_bounds(size_t iF) const
+{
+  float3 center = make_float3(0, 0, 0);
+  BoundBox face_bounds;
+  for (size_t i = 0; i < face_sizes[iF]; i++) {
+    float3 pt = verts[face_starts[iF] + i];
+    face_bounds.grow(pt);
+    center += pt;
+  }
+
+  if (boundingbox_expansion > 0) {
+    center /= static_cast<float>(face_sizes[iF]);
+    float scale = 1 + boundingbox_expansion;
+    face_bounds.min = center + scale * (face_bounds.min - center);
+    face_bounds.max = center + scale * (face_bounds.max - center);
+  }
+
+  return face_bounds;
 }
 
 void NonplanarPolygonMesh::apply_transform(const Transform &tfm, const bool apply_to_motion)
@@ -270,7 +268,8 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
       v_id++;
     }
     tri_verts[v_id] = pt_sum / face_sizes[j];
-    v_id++;
+    tri_verts[v_id + 1] = make_float3(epsilon, levelset, 0);
+    v_id += 2;
     tri_vindex[j] = make_packed_uint3(vert_offset + v_start, face_sizes[j], 0);
   }
 }

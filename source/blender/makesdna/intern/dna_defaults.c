@@ -254,6 +254,7 @@ SDNA_DEFAULT_DECL_STRUCT(DynamicPaintModifierData);
 SDNA_DEFAULT_DECL_STRUCT(EdgeSplitModifierData);
 SDNA_DEFAULT_DECL_STRUCT(ExplodeModifierData);
 /* Fluid modifier skipped for now. */
+SDNA_DEFAULT_DECL_STRUCT(HarnackModifierData);
 SDNA_DEFAULT_DECL_STRUCT(HookModifierData);
 SDNA_DEFAULT_DECL_STRUCT(LaplacianDeformModifierData);
 SDNA_DEFAULT_DECL_STRUCT(LaplacianSmoothModifierData);
@@ -498,6 +499,7 @@ const void *DNA_default_table[SDNA_TYPE_MAX] = {
     SDNA_DEFAULT_DECL(EdgeSplitModifierData),
     SDNA_DEFAULT_DECL(ExplodeModifierData),
     /* Fluid modifier skipped for now. */
+    SDNA_DEFAULT_DECL(HarnackModifierData),
     SDNA_DEFAULT_DECL(HookModifierData),
     SDNA_DEFAULT_DECL(LaplacianDeformModifierData),
     SDNA_DEFAULT_DECL(LaplacianSmoothModifierData),

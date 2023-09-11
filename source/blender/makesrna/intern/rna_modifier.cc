@@ -99,6 +99,11 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_MOD_VERTEX_WEIGHT,
      "Vertex Weight Proximity",
      "Set the vertex group weights based on the distance to another target object"},
+    {eModifierType_Harnack,
+     "HARNACK",
+     ICON_MOD_CURVE,
+     "Harnack Trace",
+     "Visualize nonplanar polygons with Harnack tracing"},
 
     RNA_ENUM_ITEM_HEADING(N_("Generate"), nullptr),
     {eModifierType_Array,
@@ -7294,6 +7299,47 @@ static void rna_def_modifier_volume_to_mesh(BlenderRNA *brna)
   RNA_define_lib_overridable(false);
 }
 
+static void rna_def_modifier_harnack(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  // Define the RNA and bind it to the HarnackModifierData DNA struct
+  srna = RNA_def_struct(brna, "HarnackModifier", "Modifier");
+  RNA_def_struct_ui_text(srna, "Harnack Modifier", "");
+  RNA_def_struct_sdna(srna, "HarnackModifierData");
+  RNA_def_struct_ui_icon(srna, ICON_MOD_CURVE);
+
+  RNA_define_lib_overridable(true);
+
+  // There will be such a block for each data field of HarnackModifierData
+  prop = RNA_def_property(srna, "epsilon", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_range(prop, 0, 1);
+  RNA_def_property_ui_range(prop, 0, 1, 0.0001, 6);
+  RNA_def_property_ui_text(prop, "Epsilon", "Termination criterion for harnack tracing");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "levelset", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_range(prop, 0, 1);
+  RNA_def_property_ui_range(prop, 0, 1, 0.1, 2);
+  RNA_def_property_ui_text(prop, "Level set", "Level set to harnack trace (normalized to [0, 1])");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "boundingbox_expansion", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_range(prop, 0, 10);
+  RNA_def_property_ui_range(prop, 0, 10, 0.1, 2);
+  RNA_def_property_ui_text(prop,
+                           "Bounding box expansion",
+                           "How much to increase bounding box size past polygon vertices");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "use_harnack_tracing", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Use Harnack tracing", "");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  RNA_define_lib_overridable(false);
+}
+
 void RNA_def_modifier(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -7454,6 +7500,7 @@ void RNA_def_modifier(BlenderRNA *brna)
   rna_def_modifier_mesh_to_volume(brna);
   rna_def_modifier_volume_displace(brna);
   rna_def_modifier_volume_to_mesh(brna);
+  rna_def_modifier_harnack(brna);
 }
 
 #endif
