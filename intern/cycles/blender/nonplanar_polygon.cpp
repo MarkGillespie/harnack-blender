@@ -428,35 +428,37 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
   mesh->set_epsilon(0.0001);
   mesh->set_levelset(0.5);
   mesh->set_boundingbox_expansion(0);
-  bool found_epsilon = false, found_levelset = false, found_bounds = false;
 
   // I don't know why I can't find these attributes using b_mesh.attributes["EPSILON"], but looping
   // through all the attributes seems to work fine
-  std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS";
+  std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS",
+              grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF";
   for (BL::Attribute &b_attribute : b_mesh.attributes) {
     const ustring name{b_attribute.name().c_str()};
 
     if (name == epsilon_tag) {
-      found_epsilon = true;
       BL::FloatAttribute epsilon_attribute{b_attribute};
       const float *epsilon_data = static_cast<const float *>(epsilon_attribute.data[0].ptr.data);
       mesh->set_epsilon(epsilon_data[0]);
     }
     else if (name == levelset_tag) {
-      found_levelset = true;
       BL::FloatAttribute levelset_attribute{b_attribute};
       const float *levelset_data = static_cast<const float *>(levelset_attribute.data[0].ptr.data);
       mesh->set_levelset(levelset_data[0]);
     }
     else if (name == bounds_tag) {
-      found_bounds = true;
       BL::FloatAttribute bounds_attribute{b_attribute};
       const float *bounds_data = static_cast<const float *>(bounds_attribute.data[0].ptr.data);
       mesh->set_boundingbox_expansion(bounds_data[0]);
     }
-
-    if (found_epsilon && found_levelset && found_bounds)
-      break;
+    else if (name == grad_termination_tag) {
+      mesh->set_use_grad_termination(true);
+    }
+    else if (name == formula_tag) {
+      BL::FloatAttribute formula_attribute{b_attribute};
+      const float *formula_data = static_cast<const float *>(formula_attribute.data[0].ptr.data);
+      mesh->set_solid_angle_formula(static_cast<int>(formula_data[0]));
+    }
   }
 }
 

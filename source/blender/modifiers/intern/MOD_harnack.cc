@@ -39,22 +39,33 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
   HarnackModifierData *smd = (HarnackModifierData *)md;
 
   std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS",
+              grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF",
               harnack_tag = "HARNACK";
 
-  blender::bke::AttributeWriter<float> gaw =
+  blender::bke::AttributeWriter<float> faw =
       mesh->attributes_for_write().lookup_or_add_for_write<float>(harnack_tag, ATTR_DOMAIN_POINT);
-  gaw.varray.set(0, 1);
+  faw.varray.set(0, 1);
 
-  gaw = mesh->attributes_for_write().lookup_or_add_for_write<float>(epsilon_tag,
+  if (smd->use_grad_termination) {
+    faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(grad_termination_tag,
+                                                                      ATTR_DOMAIN_POINT);
+    faw.varray.set(0, 1);
+  }
+
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(epsilon_tag,
                                                                     ATTR_DOMAIN_POINT);
-  gaw.varray.set(0, smd->epsilon);
+  faw.varray.set(0, smd->epsilon);
 
-  gaw = mesh->attributes_for_write().lookup_or_add_for_write<float>(levelset_tag,
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(levelset_tag,
                                                                     ATTR_DOMAIN_POINT);
-  gaw.varray.set(0, smd->levelset);
+  faw.varray.set(0, smd->levelset);
 
-  gaw = mesh->attributes_for_write().lookup_or_add_for_write<float>(bounds_tag, ATTR_DOMAIN_POINT);
-  gaw.varray.set(0, smd->boundingbox_expansion);
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(bounds_tag, ATTR_DOMAIN_POINT);
+  faw.varray.set(0, smd->boundingbox_expansion);
+
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(formula_tag,
+                                                                    ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->solid_angle_formula));
 
   return mesh;
 }
@@ -76,7 +87,9 @@ static void panel_draw(const bContext *C, Panel *panel)
           UI_ITEM_NONE,
           IFACE_("Bounding Box Expansion"),
           ICON_NONE);
-  uiItemR(layout, ptr, "use_harnack_tracing", UI_ITEM_NONE, nullptr, ICON_NONE);
+
+  uiItemR(layout, ptr, "solid_angle_formula", UI_ITEM_NONE, nullptr, ICON_NONE);
+  uiItemR(layout, ptr, "use_grad_termination", UI_ITEM_NONE, nullptr, ICON_NONE);
 
   modifier_panel_end(layout, ptr);
 }

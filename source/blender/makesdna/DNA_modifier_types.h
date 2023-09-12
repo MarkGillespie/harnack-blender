@@ -2424,13 +2424,20 @@ typedef enum VolumeToMeshFlag {
   VOLUME_TO_MESH_USE_SMOOTH_SHADE = 1 << 0,
 } VolumeToMeshFlag;
 
+enum {
+  MOD_HARNACK_TRIANGULATE = 0,
+  MOD_HARNACK_PREQUANTUM = 1,
+  MOD_HARNACK_GAUSS_BONNET = 2,
+};
+
 typedef struct HarnackModifierData {
   ModifierData modifier;
   float epsilon;                // 4 bytes
   float levelset;               // 4 bytes
   float boundingbox_expansion;  // 4 bytes
-  char use_harnack_tracing;     // 1 byte
-  char _pad[3];
+  int solid_angle_formula;      // 4 bytes
+  char use_grad_termination;    // 1 byte
+  char _pad[7];
 
   /* https://blog.exppad.com/article/writing-blender-modifier
     Another requirement is to pad the struct to make its overall size be a multiple of 8 bytes. If

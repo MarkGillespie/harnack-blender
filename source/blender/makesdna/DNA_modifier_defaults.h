@@ -306,7 +306,8 @@
     .epsilon = 0.001, \
     .levelset = 0.5, \
     .boundingbox_expansion = 0., \
-    .use_harnack_tracing = true, \
+    .solid_angle_formula = 0, \
+    .use_grad_termination = false, \
   }
 
 #define _DNA_DEFAULT_HookModifierData \

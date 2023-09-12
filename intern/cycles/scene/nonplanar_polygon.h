@@ -53,6 +53,13 @@ class NonplanarPolygonMesh : public Geometry {
   NODE_SOCKET_API(float, epsilon);
   NODE_SOCKET_API(float, levelset);
   NODE_SOCKET_API(float, boundingbox_expansion);
+  NODE_SOCKET_API(bool, use_grad_termination);
+
+  // from DNA_modifier_types.h
+  // MOD_HARNACK_TRIANGULATE = 0,
+  // MOD_HARNACK_PREQUANTUM = 1,
+  // MOD_HARNACK_GAUSS_BONNET = 2,
+  NODE_SOCKET_API(int, solid_angle_formula);
 
   size_t prim_space() const
   {

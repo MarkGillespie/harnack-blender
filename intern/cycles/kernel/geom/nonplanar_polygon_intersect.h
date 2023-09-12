@@ -14,9 +14,12 @@
 
 CCL_NAMESPACE_BEGIN
 
-#define HARNACK_EPS 0.0001
-
 // TODO: move back to math utils?
+// solid_angle_formula
+// from DNA_modifier_types.h
+// MOD_HARNACK_TRIANGULATE = 0,
+// MOD_HARNACK_PREQUANTUM = 1,
+// MOD_HARNACK_GAUSS_BONNET = 2,
 template<typename T>
 ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
                                                   const float3 ray_Df,
@@ -26,11 +29,14 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
                                                   const size_t N,
                                                   const float epsilonf,
                                                   const float levelsetf,
+                                                  const int solid_angle_formula,
+                                                  const bool use_grad_termination,
                                                   ccl_private float *isect_u,
                                                   ccl_private float *isect_v,
                                                   ccl_private float *isect_t)
 {
   using T3 = std::array<T, 3>;
+  using T4 = std::array<T, 4>;
   auto dot = [](const T3 &a, const T3 &b) -> T { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
   auto cross = [](const T3 &a, const T3 &b) -> T3 {
     return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
@@ -47,6 +53,64 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
   // a + s * b
   auto fma = [](const T3 &a, T s, const T3 &b) -> T3 {
     return {a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]};
+  };
+  //============================================================
+  //
+  //                          Quaternions
+  //
+  //============================================================
+  // find a vector orthogonal to v
+  auto orthogonal = [](const T3 &v) -> T3 {
+    if (std::abs(v[0]) <= std::abs(v[1]) && std::abs(v[0]) <= std::abs(v[2])) {
+      return T3{0., -v[2], v[1]};
+    }
+    else if (std::abs(v[1]) <= std::abs(v[0]) && std::abs(v[1]) <= std::abs(v[2])) {
+      return T3{v[2], 0., -v[0]};
+    }
+    else {
+      return T3{-v[1], v[0], 0.};
+    }
+  };
+  auto mul_s = [](T s, const T3 &v) -> T3 { return {s * v[0], s * v[1], s * v[2]}; };
+  auto q_re = [](const T4 &q) -> T { return q[0]; };
+  auto q_im = [](const T4 &q) -> T3 { return {q[1], q[2], q[3]}; };
+  auto build_T4 = [](T x, const T3 &yzw) -> T4 { return {x, yzw[0], yzw[1], yzw[2]}; };
+  auto q_dot = [](const T4 &a, const T4 &b) -> T {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  };
+  auto q_mul = [&](const T4 &a, const T4 &b) -> T4 {
+    T3 u = mul_s(q_re(a), q_im(b));
+    T3 v = mul_s(q_re(b), q_im(a));
+    T3 w = cross(q_im(a), q_im(b));
+    return {q_re(a) * q_re(b) - dot(q_im(a), q_im(b)),
+            u[0] + v[0] + w[0],
+            u[1] + v[1] + w[1],
+            u[2] + v[2] + w[2]};
+  };
+  auto q_conj = [](const T4 &q) -> T4 { return {q[0], -q[1], -q[2], -q[3]}; };
+  auto q_div_s = [](const T4 &q, T s) -> T4 { return {q[0] / s, q[1] / s, q[2] / s, q[3] / s}; };
+  auto q_inv = [&](const T4 &q) -> T4 { return q_div_s(q_conj(q), q_dot(q, q)); };
+  auto q_div = [&](const T4 &a, const T4 &b) -> T4 { return q_mul(a, q_inv(b)); };
+
+  // dihedral of two points on the unit sphere, as defined by Chern & Ishida
+  // https://arxiv.org/abs/2303.14555
+  auto dihedral = [&](const T3 &p1, const T3 &p2) -> T4 {
+    // https://stackoverflow.com/a/11741520
+    T lengthProduct = len(p1) * len(p2);
+
+    if (std::abs(dot(p1, p2) / lengthProduct + 1.) < 0.0001) {
+      // antiparallel vectors
+      return build_T4(0., orthogonal(p1));
+    }
+
+    // can skip normalization since we don't care about magnitude
+    return build_T4(dot(p1, p2) + lengthProduct, cross(p1, p2));
+  };
+
+  // arg(\bar{q2} q1) as defined by Chern & Ishida https://arxiv.org/abs/2303.14555
+  auto fiberArg = [&](const T4 &q1, const T4 &q2) -> T {
+    T4 s = q_mul(q_conj(q2), q1);
+    return atan2(s[1], s[0]);
   };
 
   int max_iterations = 1500;
@@ -65,10 +129,10 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
   // Fractional mod function that behaves the same as in GLSL
   auto glsl_mod = [](T x, T y) -> T { return x - y * std::floor(x / y); };
 
-  auto close_to_zero = [&](T ang) -> bool {
+  auto close_to_zero = [&](T ang, const T3 &grad) -> bool {
     // Check if an angle is within epsilon of 0 (or 4π)
     T dis = fmin(ang, (T)(4 * M_PI) - ang);
-    T tolScaling = 1;  // useGradStoppingCriterion ? Length(grad) : 1;
+    T tolScaling = use_grad_termination ? len(grad) : 1;
     return dis < epsilon * tolScaling;
   };
 
@@ -109,34 +173,111 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
     return std::min(lo_r, up_r);
   };
 
-  auto solid_angle = [&](const T3 &x) -> T {
+  auto triangulated_solid_angle = [&](const T3 &x, T3 &grad) -> T {
     // compute the vectors xp from the evaluation point x
     // to all the polygon vertices, and their lengths Lp
     std::vector<T3> xp;
     xp.reserve(N + 1);
     std::vector<T> Lp;
     Lp.reserve(N + 1);
-    for (int i = 0; i < N + 1; i++) {
+    for (int i = 0; i < N + 1; i++) {  // center = pts[N]
       xp.push_back(diff_f(pts[i], x));
       Lp.push_back(len(xp[i]));
     }
-    xp.push_back(diff(center, x));
-    Lp.push_back(len(xp[N]));
 
     // Iterate over triangles used to triangulate the polygon
     std::complex<T> running_angle{1., 0.};
+    grad = T3{0., 0., 0.};
     for (int i = 0; i < N; i++) {
       int a = i;
       int b = (i + 1) % N;
       int c = N;
 
+      T3 n = cross(xp[a], xp[b]);
+
       // Add the solid angle of this triangle to the total
       std::complex<T> tri_angle{Lp[a] * Lp[b] * Lp[c] + dot(xp[a], xp[b]) * Lp[c] +
                                     dot(xp[b], xp[c]) * Lp[a] + dot(xp[a], xp[c]) * Lp[b],
-                                dot(xp[a], cross(xp[b], xp[c]))};
+                                dot(xp[c], n)};
       running_angle *= tri_angle;
+
+      //== compute gradient
+      if (use_grad_termination) {
+        const T3 &g0 = xp[a];
+        const T3 &g1 = xp[b];
+        T n2 = len_squared(n);
+        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
+                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
+        grad[0] -= n[0] / n2 * scale;
+        grad[1] -= n[1] / n2 * scale;
+        grad[2] -= n[2] / n2 * scale;
+      }
     }
     return 2 * std::arg(running_angle);
+  };
+
+  auto prequantum_solid_angle = [&](const T3 &x, T3 &grad) -> T {
+    // compute the vectors xp from the evaluation point x
+    // to all the polygon vertices, and their lengths Lp
+    std::vector<T3> xp;
+    xp.reserve(N);
+    std::vector<T> Lp;
+    Lp.reserve(N);
+    for (int i = 0; i < N; i++) {
+      xp.push_back(diff_f(pts[i], x));
+      Lp.push_back(len(xp[i]));
+    }
+
+    int start = 0;
+    T4 q0 = dihedral(T3{1., 0., 0.}, xp[start]);  // point in fiber of points[start]-x
+    T4 qi = q0;
+    for (int i = 0; i < N; i++) {
+      int a = i;
+      int b = (i + 1) % N;
+      T4 d = dihedral(xp[a], xp[b]);
+      qi = q_mul(d, qi);
+    }
+
+    return -2. * fiberArg(q0, qi);
+  };
+
+  auto gauss_bonnet_solid_angle = [&](const T3 &x, T3 &grad) -> T {
+    // compute the vectors xp from the evaluation point x
+    // to all the polygon vertices, and their lengths Lp
+    std::vector<T3> xp;
+    xp.reserve(N);
+    std::vector<T> Lp;
+    Lp.reserve(N);
+    for (int i = 0; i < N; i++) {
+      xp.push_back(diff_f(pts[i], x));
+      Lp.push_back(len(xp[i]));
+    }
+
+    // Iterate over triangles used to triangulate the polygon
+    T total_angle = 0.;
+    grad = T3{0., 0., 0.};
+    for (int i = 0; i < N; i++) {
+      int a = (i + N - 1) % N;
+      int b = i;
+      int c = (i + 1) % N;
+      T3 n_prev = cross(xp[a], xp[b]);
+      T3 n_next = cross(xp[b], xp[c]);
+
+      total_angle += atan2(dot(xp[b], cross(n_prev, n_next)) / Lp[b], dot(n_prev, n_next));
+
+      //== compute gradient
+      if (use_grad_termination) {
+        const T3 &g0 = xp[a];
+        const T3 &g1 = xp[b];
+        T n2 = len_squared(n_prev);
+        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
+                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
+        grad[0] -= n_prev[0] / n2 * scale;
+        grad[1] -= n_prev[1] / n2 * scale;
+        grad[2] -= n_prev[2] / n2 * scale;
+      }
+    }
+    return 2. * M_PI - total_angle;
   };
 
   /* Find intersection with Harnack tracing */
@@ -167,7 +308,11 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
     // representative of the solid angle, shifted by the target level set
     // value, within the range [0,4π).  Only then do we apply the shift.
     // return fmod(angleSum - levelset, 4.f*M_PI) + shift;
-    T val = glsl_mod((double)solid_angle(pos) - levelset, 4. * M_PI);
+    T3 grad;
+    T omega = solid_angle_formula == 0 ? triangulated_solid_angle(pos, grad) :
+              solid_angle_formula == 1 ? prequantum_solid_angle(pos, grad) :
+                                         gauss_bonnet_solid_angle(pos, grad);
+    T val = glsl_mod((double)omega - levelset, 4. * M_PI);
 
     // Calculate the radius of a ball around the current point over which
     // we know the function is harmonic.  An easy way to identify such a
@@ -178,7 +323,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
 
     // If we're close enough to the level set, or we've exceeded the
     // maximum number of iterations, assume there's a hit.
-    if (close_to_zero(val) || R < epsilon || iter > max_iterations) {
+    if (close_to_zero(val, grad) || R < epsilon || iter > max_iterations) {
       // if (R < epsilon)   grad = pos - closestPoint; // TODO: this?
       /* std::string info = "hit info | val: " + std::to_string(val) + " | R: " + std::to_string(R)
        * + */
@@ -218,14 +363,28 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
   const uint3 polygon_data = kernel_data_fetch(tri_vindex, prim);
   uint polygon_start = polygon_data.x;
   uint N = polygon_data.y;
+  uint solid_angle_formula = polygon_data.z;
+  // printf("solid_angle_formula: %d\n", solid_angle_formula);
   const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
   float3 params = pts[N + 1];
   float epsilon = params.x;
   float levelset = params.y * ((float)(4. * M_PI));
+  bool use_grad_termination = static_cast<bool>(params.z);
 
   float u, v, t;
-  if (ray_nonplanar_polygon_intersect_T<double>(
-          P, dir, tmin, tmax, pts, N, epsilon, levelset, &u, &v, &t))
+  if (ray_nonplanar_polygon_intersect_T<double>(P,
+                                                dir,
+                                                tmin,
+                                                tmax,
+                                                pts,
+                                                N,
+                                                epsilon,
+                                                levelset,
+                                                solid_angle_formula,
+                                                use_grad_termination,
+                                                &u,
+                                                &v,
+                                                &t))
   {
 #ifdef __VISIBILITY_FLAG__
     /* Visibility flag test. we do it here under the assumption
@@ -248,7 +407,7 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
 
 /* Normal on nonplanar polygon. */
 // TODO: move to better-named file
-// TODO: implement
+// TODO: deduplicate with version in harnack tracing code?
 
 template<typename T>
 ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,

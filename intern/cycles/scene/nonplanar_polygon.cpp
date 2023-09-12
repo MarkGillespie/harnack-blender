@@ -34,6 +34,8 @@ NODE_DEFINE(NonplanarPolygonMesh)
   SOCKET_FLOAT(epsilon, "Epsilon", 0);
   SOCKET_FLOAT(levelset, "Levelset", 0);
   SOCKET_FLOAT(boundingbox_expansion, "Bounding Box Expansion", 0);
+  SOCKET_INT(solid_angle_formula, "Solid Angle Formula", 0);
+  SOCKET_BOOLEAN(use_grad_termination, "Use Gradient Termination Condition", false);
 
   return type;
 }
@@ -268,9 +270,9 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
       v_id++;
     }
     tri_verts[v_id] = pt_sum / face_sizes[j];
-    tri_verts[v_id + 1] = make_float3(epsilon, levelset, 0);
+    tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(use_grad_termination));
     v_id += 2;
-    tri_vindex[j] = make_packed_uint3(vert_offset + v_start, face_sizes[j], 0);
+    tri_vindex[j] = make_packed_uint3(vert_offset + v_start, face_sizes[j], solid_angle_formula);
   }
 }
 

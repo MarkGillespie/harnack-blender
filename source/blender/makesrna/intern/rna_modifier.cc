@@ -669,6 +669,26 @@ const EnumPropertyItem rna_enum_subdivision_boundary_smooth_items[] = {
     {0, nullptr, 0, nullptr, nullptr},
 };
 
+const EnumPropertyItem rna_enum_modifier_harnack_solid_angle_formula_items[] = {
+    {MOD_HARNACK_TRIANGULATE,
+     "TRIANGULATE",
+     0,
+     "Triangulate",
+     "Evaluate the solid angle by triangulating the polygon and applying the Van Oosterom and "
+     "Strackee formula"},
+    {MOD_HARNACK_PREQUANTUM,
+     "PREQUANTUM",
+     0,
+     "Prequantum (horizontal lift)",
+     "Evaluate the solid angle by the horizontal lift of Chern & Ishida "},
+    {MOD_HARNACK_GAUSS_BONNET,
+     "GAUSS_BONNET",
+     0,
+     "Gauss Bonnet",
+     "Evaluate the solid angle with the Gauss Bonnet formula, numerically unstable"},
+    {0, nullptr, 0, nullptr, nullptr},
+};
+
 #ifdef RNA_RUNTIME
 #  include "DNA_curve_types.h"
 #  include "DNA_fluid_types.h"
@@ -7333,8 +7353,15 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
                            "How much to increase bounding box size past polygon vertices");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
-  prop = RNA_def_property(srna, "use_harnack_tracing", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_ui_text(prop, "Use Harnack tracing", "");
+  prop = RNA_def_property(srna, "solid_angle_formula", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, nullptr, "solid_angle_formula");
+  RNA_def_property_enum_items(prop, rna_enum_modifier_harnack_solid_angle_formula_items);
+  RNA_def_property_ui_text(
+      prop, "Solid Angle Formula", "Controls how to evaluate the solid angle function");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "use_grad_termination", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Use gradient termination condition", "");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   RNA_define_lib_overridable(false);
