@@ -27,15 +27,21 @@ NODE_DEFINE(NonplanarPolygonMesh)
   NodeType *type = NodeType::add(
       "Nonplanar Polygon", create, NodeType::NONE, Geometry::get_node_base_type());
 
+  SOCKET_INT(scenario, "Scenario", 0);
   SOCKET_POINT_ARRAY(verts, "Vertices", array<float3>());
   SOCKET_INT_ARRAY(face_starts, "Face Starts", array<int>());
   SOCKET_INT_ARRAY(face_sizes, "Face Sizes", array<int>());
   SOCKET_INT_ARRAY(shader, "Shader", array<int>());
   SOCKET_FLOAT(epsilon, "Epsilon", 0);
   SOCKET_FLOAT(levelset, "Levelset", 0);
+  SOCKET_FLOAT(frequency, "Frequency", 0);
   SOCKET_FLOAT(boundingbox_expansion, "Bounding Box Expansion", 0);
   SOCKET_INT(solid_angle_formula, "Solid Angle Formula", 0);
+  SOCKET_INT(max_iterations, "Max Iterations", 1500);
+  SOCKET_INT(precision, "Precision", 1);
   SOCKET_BOOLEAN(use_grad_termination, "Use Gradient Termination Condition", false);
+  SOCKET_BOOLEAN(polygon_with_holes, "Polygon with Holes", false);
+  SOCKET_BOOLEAN(clip_y, "Clip Y", false);
 
   return type;
 }
@@ -260,9 +266,13 @@ void NonplanarPolygonMesh::pack_shaders(Scene *scene, uint *tri_shader)
 void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tri_vindex)
 {
   size_t triangles_size = face_starts.size();
+  uint properties = (max_iterations << 6) | (static_cast<uint>(solid_angle_formula) << 2) |
+                    (static_cast<uint>(precision) << 1) | use_grad_termination;
+  uint n_loops = polygon_with_holes ? triangles_size : 1;
   uint v_id = 0;
+
   for (uint j = 0; j < triangles_size; j++) {
-    uint v_start = v_id;
+    tri_vindex[j] = make_packed_uint3(vert_offset + v_id, face_sizes[j], n_loops);
     float3 pt_sum = make_float3(0, 0, 0);
     for (size_t i = 0; i < face_sizes[j]; i++) {
       tri_verts[v_id] = verts[face_starts[j] + i];
@@ -270,9 +280,9 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
       v_id++;
     }
     tri_verts[v_id] = pt_sum / face_sizes[j];
-    tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(use_grad_termination));
-    v_id += 2;
-    tri_vindex[j] = make_packed_uint3(vert_offset + v_start, face_sizes[j], solid_angle_formula);
+    tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(properties));
+    tri_verts[v_id + 2] = make_float3(frequency, clip_y, 0);
+    v_id += 3;
   }
 }
 

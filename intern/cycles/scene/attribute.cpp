@@ -6,6 +6,7 @@
 #include "scene/hair.h"
 #include "scene/image.h"
 #include "scene/mesh.h"
+#include "scene/nonplanar_polygon.h"
 #include "scene/pointcloud.h"
 
 #include "util/foreach.h"
@@ -200,6 +201,10 @@ size_t Attribute::element_size(Geometry *geom, AttributePrimitive prim) const
           size -= mesh->get_num_subd_verts();
         }
       }
+      else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+        NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
+        size = mesh->num_corners();
+      }
       else if (geom->geometry_type == Geometry::POINTCLOUD) {
         PointCloud *pointcloud = static_cast<PointCloud *>(geom);
         size = pointcloud->num_points();
@@ -229,6 +234,10 @@ size_t Attribute::element_size(Geometry *geom, AttributePrimitive prim) const
           size = mesh->get_num_subd_faces() + mesh->get_num_ngons();
         }
       }
+      else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+        NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
+        size = mesh->num_faces();
+      }
       break;
     case ATTR_ELEMENT_CORNER:
     case ATTR_ELEMENT_CORNER_BYTE:
@@ -240,6 +249,10 @@ size_t Attribute::element_size(Geometry *geom, AttributePrimitive prim) const
         else {
           size = mesh->get_subd_face_corners().size() + mesh->get_num_ngons();
         }
+      }
+      else if (geom->geometry_type == Geometry::NONPLANAR_POLYGON_MESH) {
+        NonplanarPolygonMesh *mesh = static_cast<NonplanarPolygonMesh *>(geom);
+        size = mesh->num_corners();
       }
       break;
     case ATTR_ELEMENT_CURVE:

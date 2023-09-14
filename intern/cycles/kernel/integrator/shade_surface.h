@@ -20,6 +20,8 @@
 #include "kernel/integrator/subsurface.h"
 #include "kernel/integrator/volume_stack.h"
 
+#include "kernel/geom/nonplanar_polygon_intersect.h"  // nonplanar_polygon_normal
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device_forceinline void integrate_surface_shader_setup(KernelGlobals kg,
@@ -40,6 +42,11 @@ ccl_device_forceinline float3 integrate_surface_ray_offset(KernelGlobals kg,
                                                            const float3 ray_P,
                                                            const float3 ray_D)
 {
+  // TKTKTK; TODO: is this necessary?
+  // if (sd->type & PRIMITIVE_NONPLANAR_POLYGON) {
+  //   return ray_offset(ray_P, sd->Ng);
+  // }
+
   /* No ray offset needed for other primitive types. */
   if (!(sd->type & PRIMITIVE_TRIANGLE)) {
     return ray_P;

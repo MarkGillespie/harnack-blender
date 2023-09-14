@@ -303,11 +303,17 @@
 
 #define _DNA_DEFAULT_HarnackModifierData \
   { \
-    .epsilon = 0.001, \
-    .levelset = 0.5, \
-    .boundingbox_expansion = 0., \
-    .solid_angle_formula = 0, \
+    .scenario = 0,                 \
+    .epsilon = 0.001,              \
+    .levelset = 0.5,               \
+    .frequency = -1,               \
+    .boundingbox_expansion = 0.,   \
+    .solid_angle_formula = 0,      \
+    .precision = 1,                \
+    .max_iterations = 1500,        \
     .use_grad_termination = false, \
+    .polygon_with_holes = false,   \
+    .clip_y = false,               \
   }
 
 #define _DNA_DEFAULT_HookModifierData \

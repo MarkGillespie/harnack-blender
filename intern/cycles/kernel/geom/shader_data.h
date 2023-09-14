@@ -83,6 +83,12 @@ ccl_device_inline void shader_setup_from_ray(KernelGlobals kg,
       sd->P = ray->P + isect->t * ray->D;
       sd->Ng = Ng;
       sd->N = Ng;
+
+      // borrowed from triangle_point_from_uv
+      if (!(sd->object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
+        const Transform tfm = object_get_transform(kg, sd);
+        sd->P = transform_point(&tfm, sd->P);
+      }
     }
     else if (sd->type == PRIMITIVE_TRIANGLE) {
       /* static triangle */
@@ -112,7 +118,7 @@ ccl_device_inline void shader_setup_from_ray(KernelGlobals kg,
     if (!(sd->object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
       /* instance transform */
       object_normal_transform_auto(kg, sd, &sd->N);
-      object_normal_transform_auto(kg, sd, &sd->Ng);
+      object_normal_transform_auto(kg, sd, &sd->Ng);  // TKTKT; TODO: reenable
 #ifdef __DPDU__
       object_dir_transform_auto(kg, sd, &sd->dPdu);
       object_dir_transform_auto(kg, sd, &sd->dPdv);

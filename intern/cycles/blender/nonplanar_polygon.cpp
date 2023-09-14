@@ -43,30 +43,17 @@ static void fill_generic_attribute(BL::Mesh &b_mesh,
 {
   switch (b_domain) {
     case BL::Attribute::domain_CORNER: {
-      if (subdivision) {
-        const int polys_num = b_mesh.polygons.length();
-        if (polys_num == 0) {
-          return;
-        }
-        const int *face_offsets = static_cast<const int *>(b_mesh.polygons[0].ptr.data);
-        for (int i = 0; i < polys_num; i++) {
-          const int poly_start = face_offsets[i];
-          const int poly_size = face_offsets[i + 1] - poly_start;
-          for (int j = 0; j < poly_size; j++) {
-            *data = get_value_at_index(poly_start + j);
-            data++;
-          }
-        }
+      const int polys_num = b_mesh.polygons.length();
+      if (polys_num == 0) {
+        return;
       }
-      else {
-        const int tris_num = b_mesh.loop_triangles.length();
-        const MLoopTri *looptris = static_cast<const MLoopTri *>(
-            b_mesh.loop_triangles[0].ptr.data);
-        for (int i = 0; i < tris_num; i++) {
-          const MLoopTri &tri = looptris[i];
-          data[i * 3 + 0] = get_value_at_index(tri.tri[0]);
-          data[i * 3 + 1] = get_value_at_index(tri.tri[1]);
-          data[i * 3 + 2] = get_value_at_index(tri.tri[2]);
+      const int *face_offsets = static_cast<const int *>(b_mesh.polygons[0].ptr.data);
+      for (int i = 0; i < polys_num; i++) {
+        const int poly_start = face_offsets[i];
+        const int poly_size = face_offsets[i + 1] - poly_start;
+        for (int j = 0; j < poly_size; j++) {
+          *data = get_value_at_index(poly_start + j);
+          data++;
         }
       }
       break;
@@ -432,10 +419,17 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
   // I don't know why I can't find these attributes using b_mesh.attributes["EPSILON"], but looping
   // through all the attributes seems to work fine
   std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS",
-              grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF";
+              grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF", holes_tag = "HOLES",
+              iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
+              frequency_tag = "FREQUENCY", harnack_tag = "HARNACK";
   for (BL::Attribute &b_attribute : b_mesh.attributes) {
     const ustring name{b_attribute.name().c_str()};
 
+    if (name == harnack_tag) {
+      BL::FloatAttribute harnack_attribute{b_attribute};
+      const float *harnack_data = static_cast<const float *>(harnack_attribute.data[0].ptr.data);
+      mesh->set_scenario(static_cast<int>(harnack_data[0]));
+    }
     if (name == epsilon_tag) {
       BL::FloatAttribute epsilon_attribute{b_attribute};
       const float *epsilon_data = static_cast<const float *>(epsilon_attribute.data[0].ptr.data);
@@ -445,6 +439,12 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
       BL::FloatAttribute levelset_attribute{b_attribute};
       const float *levelset_data = static_cast<const float *>(levelset_attribute.data[0].ptr.data);
       mesh->set_levelset(levelset_data[0]);
+    }
+    else if (name == frequency_tag) {
+      BL::FloatAttribute frequency_attribute{b_attribute};
+      const float *frequency_data = static_cast<const float *>(
+          frequency_attribute.data[0].ptr.data);
+      mesh->set_frequency(frequency_data[0]);
     }
     else if (name == bounds_tag) {
       BL::FloatAttribute bounds_attribute{b_attribute};
@@ -458,6 +458,24 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
       BL::FloatAttribute formula_attribute{b_attribute};
       const float *formula_data = static_cast<const float *>(formula_attribute.data[0].ptr.data);
       mesh->set_solid_angle_formula(static_cast<int>(formula_data[0]));
+    }
+    else if (name == holes_tag) {
+      mesh->set_polygon_with_holes(true);
+    }
+    else if (name == iteration_tag) {
+      BL::FloatAttribute iteration_attribute{b_attribute};
+      const float *iteration_data = static_cast<const float *>(
+          iteration_attribute.data[0].ptr.data);
+      mesh->set_max_iterations(static_cast<int>(iteration_data[0]));
+    }
+    else if (name == precision_tag) {
+      BL::FloatAttribute precision_attribute{b_attribute};
+      const float *precision_data = static_cast<const float *>(
+          precision_attribute.data[0].ptr.data);
+      mesh->set_precision(static_cast<int>(precision_data[0]));
+    }
+    else if (name == clip_tag) {
+      mesh->set_clip_y(true);
     }
   }
 }

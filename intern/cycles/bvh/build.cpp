@@ -361,13 +361,23 @@ void BVHBuild::add_reference_nonplanar_polygons(BoundBox &root,
                                                 int object_index)
 {
   const PrimitiveType primitive_type = PRIMITIVE_NONPLANAR_POLYGON;
-  const size_t num_faces = mesh->prim_space();
-  for (uint j = 0; j < num_faces; j++) {
-    BoundBox bounds = mesh->compute_face_bounds(j);
+  if (mesh->get_polygon_with_holes()) {
+    BoundBox bounds = mesh->bounds;
     if (bounds.valid()) {
-      references.push_back(BVHReference(bounds, j, object_index, primitive_type));
+      references.push_back(BVHReference(bounds, 0, object_index, primitive_type));
       root.grow(bounds);
       center.grow(bounds.center2());
+    }
+  }
+  else {
+    const size_t num_faces = mesh->prim_space();
+    for (uint j = 0; j < num_faces; j++) {
+      BoundBox bounds = mesh->compute_face_bounds(j);
+      if (bounds.valid()) {
+        references.push_back(BVHReference(bounds, j, object_index, primitive_type));
+        root.grow(bounds);
+        center.grow(bounds.center2());
+      }
     }
   }
 }

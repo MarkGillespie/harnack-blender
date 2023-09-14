@@ -39,15 +39,22 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
   HarnackModifierData *smd = (HarnackModifierData *)md;
 
   std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS",
-              grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF",
-              harnack_tag = "HARNACK";
+              grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF", holes_tag = "HOLES",
+              iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
+              frequency_tag = "FREQUENCY", harnack_tag = "HARNACK";
 
   blender::bke::AttributeWriter<float> faw =
       mesh->attributes_for_write().lookup_or_add_for_write<float>(harnack_tag, ATTR_DOMAIN_POINT);
-  faw.varray.set(0, 1);
+  faw.varray.set(0, static_cast<float>(smd->scenario));
 
   if (smd->use_grad_termination) {
     faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(grad_termination_tag,
+                                                                      ATTR_DOMAIN_POINT);
+    faw.varray.set(0, 1);
+  }
+
+  if (smd->polygon_with_holes) {
+    faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(holes_tag,
                                                                       ATTR_DOMAIN_POINT);
     faw.varray.set(0, 1);
   }
@@ -59,6 +66,9 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
   faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(levelset_tag,
                                                                     ATTR_DOMAIN_POINT);
   faw.varray.set(0, smd->levelset);
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(frequency_tag,
+                                                                    ATTR_DOMAIN_POINT);
+  faw.varray.set(0, smd->frequency);
 
   faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(bounds_tag, ATTR_DOMAIN_POINT);
   faw.varray.set(0, smd->boundingbox_expansion);
@@ -66,6 +76,18 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
   faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(formula_tag,
                                                                     ATTR_DOMAIN_POINT);
   faw.varray.set(0, static_cast<float>(smd->solid_angle_formula));
+
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(iteration_tag,
+                                                                    ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->max_iterations));
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(precision_tag,
+                                                                    ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->precision));
+
+  if (smd->clip_y) {
+    faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(clip_tag, ATTR_DOMAIN_POINT);
+    faw.varray.set(0, 1);
+  }
 
   return mesh;
 }
@@ -78,9 +100,11 @@ static void panel_draw(const bContext *C, Panel *panel)
   PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetPropSep(layout, true);
+  uiItemR(layout, ptr, "scenario", UI_ITEM_NONE, IFACE_("Scenario"), ICON_NONE);
 
   uiItemR(layout, ptr, "epsilon", UI_ITEM_NONE, IFACE_("Epsilon"), ICON_NONE);
   uiItemR(layout, ptr, "levelset", UI_ITEM_NONE, IFACE_("Level Set"), ICON_NONE);
+  uiItemR(layout, ptr, "frequency", UI_ITEM_NONE, IFACE_("Frequency"), ICON_NONE);
   uiItemR(layout,
           ptr,
           "boundingbox_expansion",
@@ -88,8 +112,19 @@ static void panel_draw(const bContext *C, Panel *panel)
           IFACE_("Bounding Box Expansion"),
           ICON_NONE);
 
-  uiItemR(layout, ptr, "solid_angle_formula", UI_ITEM_NONE, nullptr, ICON_NONE);
-  uiItemR(layout, ptr, "use_grad_termination", UI_ITEM_NONE, nullptr, ICON_NONE);
+  uiItemR(
+      layout, ptr, "solid_angle_formula", UI_ITEM_NONE, IFACE_("Solid Angle Formula"), ICON_NONE);
+  uiItemR(layout, ptr, "precision", UI_ITEM_NONE, IFACE_("Precision"), ICON_NONE);
+  uiItemR(layout, ptr, "max_iterations", UI_ITEM_NONE, IFACE_("Max Iterations"), ICON_NONE);
+  uiItemR(layout,
+          ptr,
+          "use_grad_termination",
+          UI_ITEM_NONE,
+          IFACE_("Use Grad Termination"),
+          ICON_NONE);
+  uiItemR(
+      layout, ptr, "polygon_with_holes", UI_ITEM_NONE, IFACE_("Polygon with Holes"), ICON_NONE);
+  uiItemR(layout, ptr, "clip_y", UI_ITEM_NONE, IFACE_("Clip Y"), ICON_NONE);
 
   modifier_panel_end(layout, ptr);
 }
@@ -106,7 +141,8 @@ ModifierTypeInfo modifierType_Harnack = {
     /*struct_size*/ sizeof(HarnackModifierData),
     /*srna*/ &RNA_HarnackModifier,
     /*type*/ eModifierTypeType_Constructive,
-    /*flags*/ eModifierTypeFlag_AcceptsMesh,
+    /*flags*/ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode |
+        eModifierTypeFlag_EnableInEditmode,
     /*icon*/ ICON_MOD_CURVE,
 
     /*copy_data*/ BKE_modifier_copydata_generic,  // save changes to data

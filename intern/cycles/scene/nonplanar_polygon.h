@@ -50,10 +50,16 @@ class NonplanarPolygonMesh : public Geometry {
   NODE_SOCKET_API_ARRAY(array<int>, face_starts)
   NODE_SOCKET_API_ARRAY(array<int>, face_sizes)
   NODE_SOCKET_API_ARRAY(array<int>, shader)
+  NODE_SOCKET_API(int, scenario);
   NODE_SOCKET_API(float, epsilon);
   NODE_SOCKET_API(float, levelset);
+  NODE_SOCKET_API(float, frequency);
   NODE_SOCKET_API(float, boundingbox_expansion);
+  NODE_SOCKET_API(int, max_iterations);
+  NODE_SOCKET_API(int, precision);
   NODE_SOCKET_API(bool, use_grad_termination);
+  NODE_SOCKET_API(bool, polygon_with_holes);
+  NODE_SOCKET_API(bool, clip_y);
 
   // from DNA_modifier_types.h
   // MOD_HARNACK_TRIANGULATE = 0,
@@ -69,12 +75,17 @@ class NonplanarPolygonMesh : public Geometry {
   size_t vert_space() const
   {
     // store a center point per face, and a set of harnack parameters per face
-    return verts.size() + 2 * face_starts.size();
+    return verts.size() + 3 * face_starts.size();
   }
 
   size_t num_faces() const
   {
     return face_starts.size();
+  }
+
+  size_t num_corners() const
+  {
+    return verts.size();
   }
 
  private:

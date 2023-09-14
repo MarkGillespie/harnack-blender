@@ -680,12 +680,42 @@ const EnumPropertyItem rna_enum_modifier_harnack_solid_angle_formula_items[] = {
      "PREQUANTUM",
      0,
      "Prequantum (horizontal lift)",
-     "Evaluate the solid angle by the horizontal lift of Chern & Ishida "},
+     "Evaluate the solid angle by the horizontal lift of Chern & Ishida"},
     {MOD_HARNACK_GAUSS_BONNET,
      "GAUSS_BONNET",
      0,
      "Gauss Bonnet",
      "Evaluate the solid angle with the Gauss Bonnet formula, numerically unstable"},
+    {0, nullptr, 0, nullptr, nullptr},
+};
+
+const EnumPropertyItem rna_enum_modifier_harnack_precision_items[] = {
+    {MOD_HARNACK_FLOAT, "FLOAT", 0, "Float", "Evaluate solid angle in single precision"},
+    {MOD_HARNACK_DOUBLE, "DOUBLE", 0, "Double", "Evaluate solid angle in double precision"},
+    {0, nullptr, 0, nullptr, nullptr},
+};
+
+const EnumPropertyItem rna_enum_modifier_harnack_scenario_items[] = {
+    {MOD_HARNACK_NONPLANAR_POLYGON,
+     "NONPLANAR_POLYGON",
+     0,
+     "Nonplanar Polygon",
+     "Render nonplanar polygon via solid angle"},
+    {MOD_HARNACK_DISK_SHELL,
+     "DISK_SHELL",
+     0,
+     "Disk Shell",
+     "Render solid angle level sets for disks"},
+    {MOD_HARNACK_SPHERICAL_HARMONIC,
+     "SPHERICAL_HARMONIC",
+     0,
+     "Spherical Harmonic",
+     "Render level sets of a harmonic polynomial"},
+    {MOD_HARNACK_RIEMANN_SURFACE,
+     "RIEMANN_SURFACE",
+     0,
+     "Riemann Surface",
+     "Render a Riemann surface"},
     {0, nullptr, 0, nullptr, nullptr},
 };
 
@@ -7333,6 +7363,14 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
   RNA_define_lib_overridable(true);
 
   // There will be such a block for each data field of HarnackModifierData
+  // const EnumPropertyItem rna_enum_modifier_harnack_scenario_items[] = {
+
+  prop = RNA_def_property(srna, "scenario", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, nullptr, "scenario");
+  RNA_def_property_enum_items(prop, rna_enum_modifier_harnack_scenario_items);
+  RNA_def_property_ui_text(prop, "Scenario", "Specify which kind of function to harnack trace");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   prop = RNA_def_property(srna, "epsilon", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0, 1);
   RNA_def_property_ui_range(prop, 0, 1, 0.0001, 6);
@@ -7343,6 +7381,15 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
   RNA_def_property_range(prop, 0, 1);
   RNA_def_property_ui_range(prop, 0, 1, 0.1, 2);
   RNA_def_property_ui_text(prop, "Level set", "Level set to harnack trace (normalized to [0, 1])");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "frequency", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_range(prop, -1, 1);
+  RNA_def_property_ui_range(prop, -1, 1, 0.1, 2);
+  RNA_def_property_ui_text(
+      prop,
+      "Frequency",
+      "Frequency of level sets to draw (set negative to draw a single level set)");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "boundingbox_expansion", PROP_FLOAT, PROP_NONE);
@@ -7360,8 +7407,40 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
       prop, "Solid Angle Formula", "Controls how to evaluate the solid angle function");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+  prop = RNA_def_property(srna, "precision", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, nullptr, "precision");
+  RNA_def_property_enum_items(prop, rna_enum_modifier_harnack_precision_items);
+  RNA_def_property_ui_text(
+      prop, "Precision", "Numerical precision to use when evaluating the solid angle function");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "max_iterations", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_sdna(prop, nullptr, "max_iterations");
+  RNA_def_property_range(prop, 1, 10000);
+  RNA_def_property_ui_range(prop, 1, 10000, 250, -1);
+  RNA_def_property_ui_text(
+      prop,
+      "Max Iterations",
+      "Maximum number of steps to take, lower value is faster but less precise");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   prop = RNA_def_property(srna, "use_grad_termination", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_ui_text(prop, "Use gradient termination condition", "");
+  RNA_def_property_ui_text(prop,
+                           "Use gradient termination condition",
+                           "Estimate distance to level set using gradient, rather than stepping "
+                           "until the function value is close enough");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "polygon_with_holes", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop,
+      "Treat as polygon with holes",
+      "Treat all faces of the mesh as boundary loops of a polygon with holes (rather "
+      "than treating them as separate nonplanar polygons)");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "clip_y", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Clip Y", "Clip surface against ZX-plane");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   RNA_define_lib_overridable(false);

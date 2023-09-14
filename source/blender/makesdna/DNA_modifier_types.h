@@ -2430,14 +2430,32 @@ enum {
   MOD_HARNACK_GAUSS_BONNET = 2,
 };
 
+enum {
+  MOD_HARNACK_FLOAT = 0,
+  MOD_HARNACK_DOUBLE = 1,
+};
+
+enum {
+  MOD_HARNACK_NONPLANAR_POLYGON = 0,
+  MOD_HARNACK_DISK_SHELL = 1,
+  MOD_HARNACK_SPHERICAL_HARMONIC = 2,
+  MOD_HARNACK_RIEMANN_SURFACE = 3,
+};
+
 typedef struct HarnackModifierData {
   ModifierData modifier;
+  int scenario;                 // 4 bytes
   float epsilon;                // 4 bytes
   float levelset;               // 4 bytes
+  float frequency;              // 4 bytes
   float boundingbox_expansion;  // 4 bytes
   int solid_angle_formula;      // 4 bytes
+  int precision;                // 4 bytes
+  int max_iterations;           // 4 bytes
   char use_grad_termination;    // 1 byte
-  char _pad[7];
+  char polygon_with_holes;      // 1 byte
+  char clip_y;                  // 1 byte
+  char _pad[5];
 
   /* https://blog.exppad.com/article/writing-blender-modifier
     Another requirement is to pad the struct to make its overall size be a multiple of 8 bytes. If
