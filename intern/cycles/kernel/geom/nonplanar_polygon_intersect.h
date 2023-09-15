@@ -22,6 +22,8 @@ CCL_NAMESPACE_BEGIN
 //    MOD_HARNACK_TRIANGULATE = 0,
 //    MOD_HARNACK_PREQUANTUM = 1,
 //    MOD_HARNACK_GAUSS_BONNET = 2,
+
+// TODO: TKTKTKT: figure out shadows
 template<typename T>
 ccl_device bool ray_nonplanar_polygon_intersect_T(const float3 ray_Pf,
                                                   const float3 ray_Df,

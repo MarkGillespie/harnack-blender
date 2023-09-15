@@ -118,7 +118,7 @@ ccl_device_inline void shader_setup_from_ray(KernelGlobals kg,
     if (!(sd->object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
       /* instance transform */
       object_normal_transform_auto(kg, sd, &sd->N);
-      object_normal_transform_auto(kg, sd, &sd->Ng);  // TKTKT; TODO: reenable
+      object_normal_transform_auto(kg, sd, &sd->Ng);
 #ifdef __DPDU__
       object_dir_transform_auto(kg, sd, &sd->dPdu);
       object_dir_transform_auto(kg, sd, &sd->dPdv);

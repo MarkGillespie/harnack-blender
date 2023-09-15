@@ -43,9 +43,10 @@ ccl_device_forceinline float3 integrate_surface_ray_offset(KernelGlobals kg,
                                                            const float3 ray_D)
 {
   // TKTKTK; TODO: is this necessary?
-  // if (sd->type & PRIMITIVE_NONPLANAR_POLYGON) {
-  //   return ray_offset(ray_P, sd->Ng);
-  // }
+  if (sd->type & PRIMITIVE_NONPLANAR_POLYGON) {
+    // return ray_offset(ray_P, sd->Ng);
+    return ray_P + 0.01 * sd->Ng;
+  }
 
   /* No ray offset needed for other primitive types. */
   if (!(sd->type & PRIMITIVE_TRIANGLE)) {

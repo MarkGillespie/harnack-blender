@@ -26,13 +26,14 @@ ccl_device
 #else
 ccl_device_inline
 #endif
-    bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals kg,
-                                     ccl_private const Ray *ray,
-                                     IntegratorShadowState state,
-                                     const uint visibility,
-                                     const uint max_hits,
-                                     ccl_private uint *r_num_recorded_hits,
-                                     ccl_private float *r_throughput)
+    bool
+    BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals kg,
+                                ccl_private const Ray *ray,
+                                IntegratorShadowState state,
+                                const uint visibility,
+                                const uint max_hits,
+                                ccl_private uint *r_num_recorded_hits,
+                                ccl_private float *r_throughput)
 {
   /* todo:
    * - likely and unlikely for if() statements
@@ -155,6 +156,11 @@ ccl_device_inline
             switch (type & PRIMITIVE_ALL) {
               case PRIMITIVE_TRIANGLE: {
                 hit = triangle_intersect(
+                    kg, &isect, P, dir, tmin, tmax, visibility, prim_object, prim, prim_addr);
+                break;
+              }
+              case PRIMITIVE_NONPLANAR_POLYGON: {
+                hit = nonplanar_polygon_intersect(
                     kg, &isect, P, dir, tmin, tmax, visibility, prim_object, prim, prim_addr);
                 break;
               }
