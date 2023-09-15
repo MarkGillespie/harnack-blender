@@ -222,6 +222,7 @@ set(SRC_KERNEL_GEOM_HEADERS
   geom/motion_triangle.h
   geom/motion_triangle_intersect.h
   geom/motion_triangle_shader.h
+  geom/nonplanar_polygon.h
   geom/nonplanar_polygon_intersect.h
   geom/object.h
   geom/patch.h
