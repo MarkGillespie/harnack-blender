@@ -2452,10 +2452,13 @@ typedef struct HarnackModifierData {
   int solid_angle_formula;      // 4 bytes
   int precision;                // 4 bytes
   int max_iterations;           // 4 bytes
+  float r;                      // 4 bytes
+  int l;                        // 4 bytes
+  int m;                        // 4 bytes
   char use_grad_termination;    // 1 byte
   char polygon_with_holes;      // 1 byte
   char clip_y;                  // 1 byte
-  char _pad[5];
+  char _pad[1];
 
   /* https://blog.exppad.com/article/writing-blender-modifier
     Another requirement is to pad the struct to make its overall size be a multiple of 8 bytes. If

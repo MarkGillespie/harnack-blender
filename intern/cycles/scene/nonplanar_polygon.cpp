@@ -43,6 +43,11 @@ NODE_DEFINE(NonplanarPolygonMesh)
   SOCKET_BOOLEAN(polygon_with_holes, "Polygon with Holes", false);
   SOCKET_BOOLEAN(clip_y, "Clip Y", false);
 
+  //==== spherical harmonic options
+  SOCKET_FLOAT(R, "R", 0);
+  SOCKET_INT(l, "l", 1);
+  SOCKET_INT(m, "m", 0);
+
   return type;
 }
 
@@ -242,47 +247,94 @@ void NonplanarPolygonMesh::add_undisplaced()
 
 void NonplanarPolygonMesh::pack_shaders(Scene *scene, uint *tri_shader)
 {
-  uint shader_id = 0;
-  uint last_shader = -1;
+  switch (scenario) {
+    case MOD_HARNACK_NONPLANAR_POLYGON: {  // nonplanar polygon
+      uint shader_id = 0;
+      uint last_shader = -1;
 
-  size_t triangles_size = face_starts.size();
-  const int *shader_ptr = shader.data();
+      size_t triangles_size = face_starts.size();
+      const int *shader_ptr = shader.data();
 
-  for (size_t i = 0; i < triangles_size; i++) {
-    const int new_shader = shader_ptr ? shader_ptr[i] : INT_MAX;
+      for (size_t i = 0; i < triangles_size; i++) {
+        const int new_shader = shader_ptr ? shader_ptr[i] : INT_MAX;
 
-    if (new_shader != last_shader) {
-      last_shader = new_shader;
-      Shader *shader = (last_shader < used_shaders.size()) ?
-                           static_cast<Shader *>(used_shaders[last_shader]) :
+        if (new_shader != last_shader) {
+          last_shader = new_shader;
+          Shader *shader = (last_shader < used_shaders.size()) ?
+                               static_cast<Shader *>(used_shaders[last_shader]) :
+                               scene->default_surface;
+          shader_id = scene->shader_manager->get_shader_id(shader, false);
+        }
+
+        tri_shader[i] = shader_id;
+      }
+      break;
+    }
+    case MOD_HARNACK_DISK_SHELL: {  // disk shell
+      // TODO
+      break;
+    }
+    case MOD_HARNACK_SPHERICAL_HARMONIC: {  // spherical harmonic
+      const int *shader_ptr = shader.data();
+      int shader_id = shader_ptr ? shader_ptr[0] : INT_MAX;
+      Shader *shader = (shader_id < used_shaders.size()) ?
+                           static_cast<Shader *>(used_shaders[shader_id]) :
                            scene->default_surface;
       shader_id = scene->shader_manager->get_shader_id(shader, false);
+      tri_shader[0] = shader_id;
+      break;
     }
-
-    tri_shader[i] = shader_id;
+    case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
+      // TODO
+      break;
+    }
   }
 }
 
 void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tri_vindex)
 {
-  size_t triangles_size = face_starts.size();
-  uint properties = (max_iterations << 6) | (static_cast<uint>(solid_angle_formula) << 2) |
-                    (static_cast<uint>(precision) << 1) | use_grad_termination;
-  uint n_loops = polygon_with_holes ? triangles_size : 1;
-  uint v_id = 0;
+  switch (scenario) {
+    case MOD_HARNACK_NONPLANAR_POLYGON: {  // nonplanar polygon
+      size_t triangles_size = face_starts.size();
+      uint properties = (max_iterations << 6) | (static_cast<uint>(solid_angle_formula) << 2) |
+                        (static_cast<uint>(precision) << 1) | use_grad_termination;
+      uint n_loops = polygon_with_holes ? triangles_size : 1;
+      uint v_id = 0;
 
-  for (uint j = 0; j < triangles_size; j++) {
-    tri_vindex[j] = make_packed_uint3(vert_offset + v_id, face_sizes[j], n_loops);
-    float3 pt_sum = make_float3(0, 0, 0);
-    for (size_t i = 0; i < face_sizes[j]; i++) {
-      tri_verts[v_id] = verts[face_starts[j] + i];
-      pt_sum += verts[face_starts[j] + i];
-      v_id++;
+      for (uint j = 0; j < triangles_size; j++) {
+        tri_vindex[j] = make_packed_uint3(vert_offset + v_id, face_sizes[j], scenario);
+        float3 pt_sum = make_float3(0, 0, 0);
+        for (size_t i = 0; i < face_sizes[j]; i++) {
+          tri_verts[v_id] = verts[face_starts[j] + i];
+          pt_sum += verts[face_starts[j] + i];
+          v_id++;
+        }
+        tri_verts[v_id] = pt_sum / face_sizes[j];
+        tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(properties));
+        tri_verts[v_id + 2] = make_float3(frequency, clip_y, static_cast<float>(n_loops));
+        v_id += 3;
+      }
+      break;
     }
-    tri_verts[v_id] = pt_sum / face_sizes[j];
-    tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(properties));
-    tri_verts[v_id + 2] = make_float3(frequency, clip_y, 0);
-    v_id += 3;
+    case MOD_HARNACK_DISK_SHELL: {  // disk shell
+      // TODO
+      break;
+    }
+    case MOD_HARNACK_SPHERICAL_HARMONIC: {  // spherical harmonic
+
+      uint properties = (max_iterations << 6) | (static_cast<uint>(precision) << 1) |
+                        use_grad_termination;
+
+      tri_vindex[0] = make_packed_uint3(vert_offset, 1, scenario);
+      tri_verts[0] = make_float3(R, static_cast<float>(l), static_cast<float>(m));
+      tri_verts[1] = make_float3(epsilon, levelset, static_cast<float>(properties));
+      tri_verts[2] = make_float3(frequency, 0, 0);
+      break;
+    }
+    case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
+      // TODO
+      break;
+    }
   }
 }
 

@@ -314,6 +314,9 @@
     .use_grad_termination = false, \
     .polygon_with_holes = false,   \
     .clip_y = false,               \
+    .r = 1.,                       \
+    .l = 4,                        \
+    .m = 2,                        \
   }
 
 #define _DNA_DEFAULT_HookModifierData \

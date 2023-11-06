@@ -421,7 +421,8 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
   std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS",
               grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF", holes_tag = "HOLES",
               iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
-              frequency_tag = "FREQUENCY", harnack_tag = "HARNACK";
+              frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
+              harnack_tag = "HARNACK";
   for (BL::Attribute &b_attribute : b_mesh.attributes) {
     const ustring name{b_attribute.name().c_str()};
 
@@ -476,6 +477,21 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
     }
     else if (name == clip_tag) {
       mesh->set_clip_y(true);
+    }
+    else if (name == r_tag) {
+      BL::FloatAttribute R_attribute{b_attribute};
+      const float *R_data = static_cast<const float *>(R_attribute.data[0].ptr.data);
+      mesh->set_R(R_data[0]);
+    }
+    else if (name == l_tag) {
+      BL::FloatAttribute l_attribute{b_attribute};
+      const float *l_data = static_cast<const float *>(l_attribute.data[0].ptr.data);
+      mesh->set_l(static_cast<int>(l_data[0]));
+    }
+    else if (name == m_tag) {
+      BL::FloatAttribute m_attribute{b_attribute};
+      const float *m_data = static_cast<const float *>(m_attribute.data[0].ptr.data);
+      mesh->set_m(static_cast<int>(m_data[0]));
     }
   }
 }

@@ -7443,6 +7443,26 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Clip Y", "Clip surface against ZX-plane");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+  prop = RNA_def_property(srna, "r", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_range(prop, 0, 2);
+  RNA_def_property_ui_range(prop, 0, 2, 0.1, 2);
+  RNA_def_property_ui_text(prop, "r", "Radius of ball for drawing spherical harmonics");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "l", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_sdna(prop, nullptr, "l");
+  RNA_def_property_range(prop, 1, 25);
+  RNA_def_property_ui_range(prop, 1, 25, 1, -1);
+  RNA_def_property_ui_text(prop, "l", "Spherical harmonic l parameter");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "m", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, nullptr, "m");
+  RNA_def_property_range(prop, -25, 25);
+  RNA_def_property_ui_range(prop, -25, 25, 1, -1);
+  RNA_def_property_ui_text(prop, "m", "Spherical harmonic m parameter (must be between -l and l)");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   RNA_define_lib_overridable(false);
 }
 

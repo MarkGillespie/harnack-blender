@@ -1703,7 +1703,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
     C_WARN_SHADOW -Wshadow
 
     # Disable because it gives warnings for printf() & friends.
-    # C_WARN_DOUBLE_PROMOTION "-Wdouble-promotion -Wno-error=double-promotion"
+    # C_WARN_DOUBLE_PROMOTION "-Wnodouble-promotion -Wno-error=double-promotion"
 
     # Use `ATTR_FALLTHROUGH` macro to suppress.
     C_WARN_IMPLICIT_FALLTHROUGH -Wimplicit-fallthrough=5
@@ -1854,6 +1854,8 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     CXX_WARN_UNDEF -Wundef
     CXX_WARN_UNDEF_PREFIX -Wundef-prefix
     CXX_WARN_UNUSED_PARAMETER -Wunused-parameter
+
+    C_WARN_DOUBLE_PROMOTION "-Wno-double-promotion -Wno-error=double-promotion"
 
     # Gives too many unfixable warnings.
     # `C_WARN_UNUSED_MACROS -Wunused-macros`

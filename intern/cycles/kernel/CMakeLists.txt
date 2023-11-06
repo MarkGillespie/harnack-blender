@@ -230,6 +230,7 @@ set(SRC_KERNEL_GEOM_HEADERS
   geom/point_intersect.h
   geom/primitive.h
   geom/shader_data.h
+  geom/spherical_harmonics.h
   geom/subd_triangle.h
   geom/triangle.h
   geom/triangle_intersect.h

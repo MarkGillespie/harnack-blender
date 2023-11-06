@@ -41,7 +41,8 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
   std::string epsilon_tag = "EPSILON", levelset_tag = "LEVELSET", bounds_tag = "BOUNDS",
               grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF", holes_tag = "HOLES",
               iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
-              frequency_tag = "FREQUENCY", harnack_tag = "HARNACK";
+              frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
+              harnack_tag = "HARNACK";
 
   blender::bke::AttributeWriter<float> faw =
       mesh->attributes_for_write().lookup_or_add_for_write<float>(harnack_tag, ATTR_DOMAIN_POINT);
@@ -88,6 +89,12 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
     faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(clip_tag, ATTR_DOMAIN_POINT);
     faw.varray.set(0, 1);
   }
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(r_tag, ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->r));
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(l_tag, ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->l));
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(m_tag, ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->m));
 
   return mesh;
 }
@@ -125,6 +132,9 @@ static void panel_draw(const bContext *C, Panel *panel)
   uiItemR(
       layout, ptr, "polygon_with_holes", UI_ITEM_NONE, IFACE_("Polygon with Holes"), ICON_NONE);
   uiItemR(layout, ptr, "clip_y", UI_ITEM_NONE, IFACE_("Clip Y"), ICON_NONE);
+  uiItemR(layout, ptr, "r", UI_ITEM_NONE, IFACE_("R"), ICON_NONE);
+  uiItemR(layout, ptr, "l", UI_ITEM_NONE, IFACE_("l"), ICON_NONE);
+  uiItemR(layout, ptr, "m", UI_ITEM_NONE, IFACE_("m"), ICON_NONE);
 
   modifier_panel_end(layout, ptr);
 }
