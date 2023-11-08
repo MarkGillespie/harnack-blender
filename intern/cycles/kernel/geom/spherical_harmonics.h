@@ -10,6 +10,6 @@ template<typename T>
 double evaluateSphericalHarmonicDouble(int n, int m, const std::array<T, 3> &pos);
 
 // return the minimum value that the (n, m) spherical harmonic takes on the unit sphere
-double sphericalHarmonicMinValue(int n, int m);
+inline double sphericalHarmonicMinValue(int n, int m);
 
 #include "spherical_harmonics.ipp"
