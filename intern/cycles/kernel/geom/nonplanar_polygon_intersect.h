@@ -31,8 +31,8 @@ typedef struct spherical_harmonic_intersection_params {
   float ray_tmin;
   float ray_tmax;
   float R;
-  uint m;
-  int l;
+  uint l;
+  int m;
   float epsilon;
   float levelset;
   float frequency;
@@ -95,14 +95,14 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
   // TODO: take in analytic expressions?
   // finite difference gradient from https://iquilezles.org/articles/normalsSDF
   auto calculateGradient = [&](const T3 &p) -> T3 {
-    const double eps = 0.0005;
+    const double eps = 0.005;
     T q0 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{1, -1, -1}));
     T q1 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, -1, 1}));
     T q2 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, 1, -1}));
     T q3 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{1, 1, 1}));
-    return T3{static_cast<T>(.5773 * (q3 + q0 - q1 - q2)),
-              static_cast<T>(.5773 * (q3 - q0 - q1 + q2)),
-              static_cast<T>(.5773 * (q3 - q0 + q1 - q2))};
+    return T3{static_cast<T>(.5773) * (q3 + q0 - q1 - q2),
+              static_cast<T>(.5773) * (q3 - q0 - q1 + q2),
+              static_cast<T>(.5773) * (q3 - q0 + q1 - q2)};
   };
 
   // Within the space of all values `levelset + 2π * frequency * k`, find the two
@@ -130,14 +130,19 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
 
     return std::min(lo_r, up_r);
   };
+  auto getMaxStep0 = [](T fx, T R, T bound, T shift) -> T {
+    T a = (fx + shift) / (bound + shift);
+    return R / 2 * std::abs(a + 2 - std::sqrt(a * a + 8 * a));
+  };
 
   auto distanceToLevelset = [&](T f, T levelset, const T3 &grad) -> T {
     T scaling = params.use_grad_termination ? fmax(len(grad), epsilon) : 1;
     return std::abs(f - levelset) / scaling;
   };
 
-  auto distanceToLevelset = [&](T f, T lower_levelset, T upper_levelset, const T3 &grad) -> T {
-    T scaling = uparams.use_grad_termination ? fmax(len(grad), epsilon) : 1;
+  auto distanceToBothLevelsets =
+      [&](T f, T lower_levelset, T upper_levelset, const T3 &grad) -> T {
+    T scaling = params.use_grad_termination ? fmax(len(grad), epsilon) : 1;
     return fmin(f - lower_levelset, upper_levelset - f) / scaling;
   };
 
@@ -190,7 +195,7 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
       dist = distanceToLevelset(f, levelset, grad);
     }
     else {  // looking for periodic level sets
-      dist = distanceToLevelset(f, lower_levelset, upper_levelset, grad);
+      dist = distanceToBothLevelsets(f, lower_levelset, upper_levelset, grad);
     }
 
     // If we're close enough to the level set, return a hit.
@@ -214,7 +219,7 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
 
     T step;
     if (params.frequency < 0) {  // just looking for a single level set
-      step = getMaxStep(f, R, levelset, shift);
+      step = getMaxStep0(f, R, levelset, shift);
     }
     else {  // looking for periodic level sets
       step = getMaxStep(f, R, lower_levelset, upper_levelset, shift);
@@ -817,22 +822,80 @@ ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,
   return make_float3(grad[0], grad[1], grad[2]);
 }
 
+template<typename T>
+ccl_device float3 ray_spherical_harmonic_normal_T(const float3 pf, uint m, int l)
+{
+  using T3 = std::array<T, 3>;
+  auto from_float3 = [](const float3 &p) -> T3 { return {(T)p.x, (T)p.y, (T)p.z}; };
+
+  T3 p = from_float3(pf);
+
+  // Return the value of this harmonic polynomial at an evaluation point p,
+  auto evaluatePolynomial = [&](const T3 &p) -> T { return evaluateSphericalHarmonic(l, m, p); };
+
+  // TODO: take in analytic expressions?
+  // finite difference gradient from https://iquilezles.org/articles/normalsSDF
+  auto calculateGradient = [&](const T3 &p) -> T3 {
+    const double eps = 0.05;
+    T q0 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{1, -1, -1}));
+    T q1 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, -1, 1}));
+    T q2 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, 1, -1}));
+    T q3 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{1, 1, 1}));
+    return T3{static_cast<T>(.5773) * (q3 + q0 - q1 - q2),
+              static_cast<T>(.5773) * (q3 - q0 - q1 + q2),
+              static_cast<T>(.5773) * (q3 - q0 + q1 - q2)};
+  };
+
+  T3 grad = calculateGradient(p);
+
+  T grad_norm = len(grad);
+  grad[0] /= grad_norm;
+  grad[1] /= grad_norm;
+  grad[2] /= grad_norm;
+
+  return make_float3(grad[0], grad[1], grad[2]);
+}
+
 ccl_device_inline float3
 nonplanar_polygon_normal(KernelGlobals kg,
                          ccl_private ShaderData *sd,
                          ccl_private const Intersection *ccl_restrict isect,
                          ccl_private const Ray *ray)
 {
-  /* load vertices */
+  // load data
   const packed_uint3 *polygon_data = &kernel_data_fetch(tri_vindex, isect->prim);
   uint polygon_start = polygon_data[0].x;
   uint N = polygon_data[0].y;
-  const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
-  float3 params = pts[N + 2];
-  uint n_loops = static_cast<uint>(params.z);
+  uint scenario = polygon_data[0].z;
 
   float3 P = ray->P + isect->t * ray->D;
-  float3 normal = ray_nonplanar_polygon_normal_T<double>(P, polygon_data, pts, n_loops);
+  float3 normal;
+
+  switch (scenario) {
+    case MOD_HARNACK_NONPLANAR_POLYGON: {
+      const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
+      uint n_loops = static_cast<uint>(pts[N + 2].z);
+      normal = ray_nonplanar_polygon_normal_T<double>(P, polygon_data, pts, n_loops);
+      break;
+    }
+    case MOD_HARNACK_DISK_SHELL: {  // disk shell
+      // TODO
+      break;
+    }
+    case MOD_HARNACK_SPHERICAL_HARMONIC: {  // spherical harmonic
+      const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
+
+      float R = pts[0].x;
+      uint l = static_cast<uint>(pts[0].y);
+      int m = static_cast<int>(pts[0].z);
+      normal = ray_spherical_harmonic_normal_T<double>(P, m, l);
+      break;
+    }
+    case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
+      // TODO
+      break;
+    }
+  }
 
   /* return normal */
   if (object_negative_scale_applied(sd->object_flag)) {
