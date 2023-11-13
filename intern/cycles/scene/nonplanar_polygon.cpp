@@ -181,8 +181,9 @@ BoundBox NonplanarPolygonMesh::compute_face_bounds(size_t iF) const
   if (boundingbox_expansion > 0) {
     center /= static_cast<float>(face_sizes[iF]);
     float scale = 1 + boundingbox_expansion;
-    face_bounds.min = center + scale * (face_bounds.min - center);
-    face_bounds.max = center + scale * (face_bounds.max - center);
+    // HACK: only scaling z coordinates right now TKTKTK
+    face_bounds.min.z = center.z + scale * fmin(face_bounds.min.z - center.z, -1.);
+    face_bounds.max.z = center.z + scale * fmax(face_bounds.max.z - center.z, 1.);
   }
 
   return face_bounds;

@@ -576,7 +576,7 @@ mark_as_advanced(WITH_CPU_SIMD)
 option(WITH_CYCLES "Enable Cycles Render Engine" ON)
 option(WITH_CYCLES_OSL "Build Cycles with OpenShadingLanguage support" ON)
 option(WITH_CYCLES_PATH_GUIDING "Build Cycles with path guiding support" ON)
-option(WITH_CYCLES_EMBREE "Build Cycles with Embree support" ON)
+option(WITH_CYCLES_EMBREE "Build Cycles with Embree support" OFF)
 option(WITH_CYCLES_LOGGING "Build Cycles with logging support" ON)
 option(WITH_CYCLES_DEBUG "Build Cycles with options useful for debugging (e.g., MIS)" OFF)
 
@@ -1703,7 +1703,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
     C_WARN_SHADOW -Wshadow
 
     # Disable because it gives warnings for printf() & friends.
-    # C_WARN_DOUBLE_PROMOTION "-Wnodouble-promotion -Wno-error=double-promotion"
+    C_WARN_DOUBLE_PROMOTION "-Wnodouble-promotion -Wno-error=double-promotion"
 
     # Use `ATTR_FALLTHROUGH` macro to suppress.
     C_WARN_IMPLICIT_FALLTHROUGH -Wimplicit-fallthrough=5
@@ -1749,6 +1749,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
     # Useful but too many false positives and inconvenient to suppress each occurrence.
     CXX_WARN_NO_STRINGOP_OVERREAD -Wno-stringop-overread
     CXX_WARN_NO_STRINGOP_OVERFLOW -Wno-stringop-overflow
+    CXX_WARN_NO_DOUBLE_PROMOTION -Wno-double-promotion
 
     # Use `[[fallthrough]]` or `ATTR_FALLTHROUGH` macro to suppress.
     CXX_WARN_IMPLICIT_FALLTHROUGH -Wimplicit-fallthrough=5
@@ -1855,7 +1856,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     CXX_WARN_UNDEF_PREFIX -Wundef-prefix
     CXX_WARN_UNUSED_PARAMETER -Wunused-parameter
 
-    C_WARN_DOUBLE_PROMOTION "-Wno-double-promotion -Wno-error=double-promotion"
+    C_WARN_DOUBLE_PROMOTION "-Wnodouble-promotion -Wno-error=double-promotion"
 
     # Gives too many unfixable warnings.
     # `C_WARN_UNUSED_MACROS -Wunused-macros`
@@ -1864,7 +1865,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     CXX_WARN_ERROR_UNGUARDED_AVAILABILITY_NEW -Werror=unguarded-availability-new
   )
 
-
+  message(STATUS "CXX_WARNINGS: ${CXX_WARNINGS}")
 
 
   # ---------------------

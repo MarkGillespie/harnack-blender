@@ -138,6 +138,10 @@ d3 diff_f(const float3 &a, const d3 &b)
 {
   return {(double)a.x - b[0], (double)a.y - b[1], (double)a.z - b[2]};
 }
+d3 diff_f(const d3 &a, const float3 &b)
+{
+  return {a[0] - (double)b.x, a[1] - (double)b.y, a[2] - (double)b.z};
+}
 // a + s * b
 d3 fma(const d3 &a, double s, const d3 &b)
 {

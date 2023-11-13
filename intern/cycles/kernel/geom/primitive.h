@@ -63,7 +63,9 @@ ccl_device_forceinline float2 primitive_surface_attribute_float2(KernelGlobals k
       return subd_triangle_attribute_float2(kg, sd, desc, dx, dy);
   }
   else if (sd->type & PRIMITIVE_NONPLANAR_POLYGON) {
-    return triangle_attribute_float2(kg, sd, desc, dx, dy);
+    // HACK to grab uvs: just return uvs as attr
+    return make_float2(sd->u, sd->v);
+    /* return triangle_attribute_float2(kg, sd, desc, dx, dy); */
   }
 #ifdef __HAIR__
   else if (sd->type & PRIMITIVE_CURVE) {

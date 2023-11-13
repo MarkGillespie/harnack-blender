@@ -15,6 +15,7 @@ set(SRC
   ies.cpp
   log.cpp
   math_cdf.cpp
+  math_elliptic_integral.cpp
   md5.cpp
   murmurhash.cpp
   path.cpp
@@ -61,6 +62,7 @@ set(SRC_HEADERS
   map.h
   math.h
   math_cdf.h
+  math_elliptic_integral.h
   math_fast.h
   math_intersect.h
   math_float2.h

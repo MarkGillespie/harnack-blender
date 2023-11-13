@@ -6,12 +6,15 @@
  *
  */
 
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
+
 #pragma once
 
 #include "kernel/sample/lcg.h"
 #include "scene/nonplanar_polygon.h"  // scenario enums
 #include "spherical_harmonics.h"
 #include "util/debug.h"
+#include "util/math_elliptic_integral.h"
 #include <array>
 
 CCL_NAMESPACE_BEGIN
@@ -53,7 +56,6 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
   T epsilon = static_cast<T>(params.epsilon);
   T frequency = static_cast<T>(params.frequency);
   T levelset = static_cast<T>(params.levelset);
-  T shift = 4. * M_PI;  // TODO: update
 
   T3 ray_P = from_float3(params.ray_P);
   T3 ray_D = from_float3(params.ray_D);
@@ -63,6 +65,11 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
 
   T radius = static_cast<T>(params.R);
   T outerRadius = static_cast<T>(1.25) * radius;  // TODO: make configurable?
+
+  T unitBound = sphericalHarmonicBound(params.l, params.m);
+  // since the spherical harmonic is homogeneous of degree l, we can bound it using a bound on the
+  // unit sphere and our sphere radius
+  T shift = unitBound * static_cast<T>(std::pow(outerRadius, params.l));
 
   // find the two times at which a ray intersects a sphere
   auto intersectSphere = [](const T3 &ro, const T3 &rd, T radius, T *t0, T *t1) -> bool {
@@ -494,6 +501,36 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     return omega;
   };
 
+  std::vector<T3> diskCenters, diskNormals;  // TKTKTK: get real data from somewhere
+  std::vector<T> diskRadii;
+  auto disk_solid_angle = [&](uint iD, const T3 &x, T3 &grad) -> T {
+    // Formulas from Solid Angle Calculation for a Circular Disk by Paxton 1959
+    T3 displacement = diff(x, diskCenters[iD]);  // might need to switch to diff_f
+    T L = dot(displacement, diskNormals[iD]);
+    T r0 = len(fma(displacement, -L, diskNormals[iD]));
+    T rm = diskRadii[iD];
+    T alphaSq = 4. * r0 * rm / std::pow(r0 + rm, 2);
+    T R1Sq = std::pow(L, 2) + std::pow(r0 - rm, 2);
+    T Rmax = std::sqrt(std::pow(L, 2) + std::pow(r0 + rm, 2));
+    T kSq = 1 - R1Sq / (Rmax * Rmax);
+
+    // TODO: adjust tolerance
+    // ( When r0 and rm are too close, alphaSq goes to 1, which leads to a singularity in
+    // elliptic_pim ) But also, when r0 and rm are too close, kSq goes to 1, leading to a
+    // singularity in elliptic_fm?
+    if (std::abs(r0 - rm) < 1e-3) {
+      return M_PI - 2 * L / Rmax * elliptic_fm(kSq);
+    }
+    else if (r0 < rm) {
+      return 2 * M_PI - 2 * L / Rmax * elliptic_fm(kSq) +
+             2 * L / Rmax * (r0 - rm) / (r0 + rm) * elliptic_pim(alphaSq, kSq);
+    }
+    else {  // (r0 > rm) {
+      return -2 * L / Rmax * elliptic_fm(kSq) +
+             2 * L / Rmax * (r0 - rm) / (r0 + rm) * elliptic_pim(alphaSq, kSq);
+    }
+  };
+
   /* Find intersection with Harnack tracing */
 
   T t = ray_tmin;
@@ -591,6 +628,7 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
                                                    int prim_addr)
 {
 
+  // std::cout << (std::string("UP HERE ")) << std::endl;
   const packed_uint3 *polygon_data = &kernel_data_fetch(tri_vindex, prim);
   uint polygon_start = polygon_data[0].x;
   uint N = polygon_data[0].y;
@@ -661,6 +699,9 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
       else if (precision == 1) {
         found_intersection = ray_spherical_harmonic_intersect_T<double>(sh_params, &u, &v, &t);
       }
+
+      // std::cout << (std::string("HERE ") + (found_intersection ? "HIT" : "MISS")) << std::endl;
+
       break;
     }
     case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
@@ -886,9 +927,15 @@ nonplanar_polygon_normal(KernelGlobals kg,
       const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
 
       float R = pts[0].x;
-      uint l = static_cast<uint>(pts[0].y);
-      int m = static_cast<int>(pts[0].z);
-      normal = ray_spherical_harmonic_normal_T<double>(P, m, l);
+      // special case for points on sphere
+      if (fabsf(P.x * P.x + P.y * P.y + P.z * P.z - R * R) < (float)1e-5) {
+        normal = normalize(P);
+      }
+      else {
+        uint l = static_cast<uint>(pts[0].y);
+        int m = static_cast<int>(pts[0].z);
+        normal = ray_spherical_harmonic_normal_T<double>(P, m, l);
+      }
       break;
     }
     case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
