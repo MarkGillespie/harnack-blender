@@ -17,6 +17,12 @@ float len(const f3 &a)
 {
   return sqrt(len_squared(a));
 }
+void normalize(f3 &vec)
+{
+  float s = len(vec);
+  for (uint i = 0; i < 3; i++)
+    vec[i] /= s;
+}
 f3 diff(const f3 &a, const f3 &b)
 {
   return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
@@ -29,6 +35,16 @@ f3 diff_f(const float3 &a, const f3 &b)
 f3 fma(const f3 &a, float s, const f3 &b)
 {
   return {a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]};
+}
+
+f3 over(const f3 &a, float s)
+{
+  return {a[0] / s, a[1] / s, a[2] / s};
+}
+
+f3 times(const f3 &a, float s)
+{
+  return {a[0] * s, a[1] * s, a[2] * s};
 }
 
 //== Quaternions
@@ -130,6 +146,12 @@ double len(const d3 &a)
 {
   return sqrt(len_squared(a));
 }
+void normalize(d3 &vec)
+{
+  float s = len(vec);
+  for (uint i = 0; i < 3; i++)
+    vec[i] /= s;
+}
 d3 diff(const d3 &a, const d3 &b)
 {
   return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
@@ -146,6 +168,16 @@ d3 diff_f(const d3 &a, const float3 &b)
 d3 fma(const d3 &a, double s, const d3 &b)
 {
   return {a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]};
+}
+
+d3 over(const d3 &a, float s)
+{
+  return {a[0] / s, a[1] / s, a[2] / s};
+}
+
+d3 times(const d3 &a, float s)
+{
+  return {a[0] * s, a[1] * s, a[2] * s};
 }
 
 //== Quaternions
