@@ -39,9 +39,13 @@ NODE_DEFINE(NonplanarPolygonMesh)
   SOCKET_INT(solid_angle_formula, "Solid Angle Formula", 0);
   SOCKET_INT(max_iterations, "Max Iterations", 1500);
   SOCKET_INT(precision, "Precision", 1);
-  SOCKET_BOOLEAN(use_grad_termination, "Use Gradient Termination Condition", false);
   SOCKET_BOOLEAN(polygon_with_holes, "Polygon with Holes", false);
+  SOCKET_BOOLEAN(capture_misses, "Capture Misses", false);
   SOCKET_BOOLEAN(clip_y, "Clip Y", false);
+
+  SOCKET_BOOLEAN(use_grad_termination, "Use Gradient Termination Condition", false);
+  SOCKET_BOOLEAN(use_overstepping, "Use Overstepping", false);
+  SOCKET_BOOLEAN(use_newton, "Use Newton Iterations", false);
 
   //==== spherical harmonic options
   SOCKET_FLOAT(R, "R", 0);
@@ -302,7 +306,7 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
     case MOD_HARNACK_NONPLANAR_POLYGON: {  // nonplanar polygon
       size_t triangles_size = face_starts.size();
       uint properties = (max_iterations << 6) | (static_cast<uint>(solid_angle_formula) << 2) |
-                        (static_cast<uint>(precision) << 1) | use_grad_termination;
+                        (static_cast<uint>(precision) << 1) | clip_y;
       uint n_loops = polygon_with_holes ? triangles_size : 1;
       uint v_id = 0;
 
@@ -316,7 +320,9 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
         }
         tri_verts[v_id] = pt_sum / face_sizes[j];
         tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(properties));
-        tri_verts[v_id + 2] = make_float3(frequency, clip_y, static_cast<float>(n_loops));
+        uint acc_cap = (use_grad_termination << 3) | (use_overstepping << 2) | (use_newton << 1) |
+                       (capture_misses);
+        tri_verts[v_id + 2] = make_float3(frequency, acc_cap, static_cast<float>(n_loops));
         v_id += 3;
       }
       break;

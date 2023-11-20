@@ -422,7 +422,7 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
               grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF", holes_tag = "HOLES",
               iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
               frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
-              harnack_tag = "HARNACK";
+              capture_misses_tag = "CAPTURE_MISSES", harnack_tag = "HARNACK";
   for (BL::Attribute &b_attribute : b_mesh.attributes) {
     const ustring name{b_attribute.name().c_str()};
 
@@ -462,6 +462,9 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
     }
     else if (name == holes_tag) {
       mesh->set_polygon_with_holes(true);
+    }
+    else if (name == capture_misses_tag) {
+      mesh->set_capture_misses(true);
     }
     else if (name == iteration_tag) {
       BL::FloatAttribute iteration_attribute{b_attribute};

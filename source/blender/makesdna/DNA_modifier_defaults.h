@@ -317,6 +317,9 @@
     .r = 1.,                       \
     .l = 4,                        \
     .m = 2,                        \
+    .capture_misses = false,       \
+    .use_overstepping = false,     \
+    .use_newton = false            \
   }
 
 #define _DNA_DEFAULT_HookModifierData \

@@ -65,11 +65,16 @@ class NonplanarPolygonMesh : public Geometry {
   NODE_SOCKET_API(float, boundingbox_expansion);
   NODE_SOCKET_API(int, max_iterations);
   NODE_SOCKET_API(int, precision);
-  NODE_SOCKET_API(bool, use_grad_termination);
 
   //==== nonplanar polygon options
   NODE_SOCKET_API(bool, polygon_with_holes);
+  NODE_SOCKET_API(bool, capture_misses);
   NODE_SOCKET_API(bool, clip_y);
+
+  //==== Acceleerations
+  NODE_SOCKET_API(bool, use_grad_termination);
+  NODE_SOCKET_API(bool, use_overstepping);
+  NODE_SOCKET_API(bool, use_newton);
 
   // from DNA_modifier_types.h
   // MOD_HARNACK_TRIANGULATE = 0,

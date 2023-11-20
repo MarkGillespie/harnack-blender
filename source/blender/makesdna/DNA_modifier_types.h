@@ -2458,7 +2458,10 @@ typedef struct HarnackModifierData {
   char use_grad_termination;    // 1 byte
   char polygon_with_holes;      // 1 byte
   char clip_y;                  // 1 byte
-  char _pad[1];
+  char capture_misses;          // 1 byte
+  char use_overstepping;        // 1 byte
+  char use_newton;              // 1 byte
+  char _pad[6];
 
   /* https://blog.exppad.com/article/writing-blender-modifier
     Another requirement is to pad the struct to make its overall size be a multiple of 8 bytes. If

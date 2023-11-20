@@ -7439,6 +7439,11 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
       "than treating them as separate nonplanar polygons)");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+  prop = RNA_def_property(srna, "capture_misses", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop, "Capture Misses", "Always report intersection (e.g. to render step counts)");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   prop = RNA_def_property(srna, "clip_y", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_ui_text(prop, "Clip Y", "Clip surface against ZX-plane");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
@@ -7461,6 +7466,16 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
   RNA_def_property_range(prop, -25, 25);
   RNA_def_property_ui_range(prop, -25, 25, 1, -1);
   RNA_def_property_ui_text(prop, "m", "Spherical harmonic m parameter (must be between -l and l)");
+
+  prop = RNA_def_property(srna, "use_overstepping", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Use overstepping", "Accelerate queries with overstepping");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "use_newton", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop, "Use Newton iterations", "Accelerate queries with Newton iterations");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   RNA_define_lib_overridable(false);
