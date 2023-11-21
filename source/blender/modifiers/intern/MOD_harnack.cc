@@ -42,7 +42,8 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
               grad_termination_tag = "GRAD_TERMINATION", formula_tag = "SAF", holes_tag = "HOLES",
               iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
               frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
-              capture_misses_tag = "CAPTURE_MISSES", harnack_tag = "HARNACK";
+              capture_misses_tag = "CAPTURE_MISSES", harnack_tag = "HARNACK",
+              overstepping_tag = "OVERSTEP", newton_tag = "NEWTON";
 
   blender::bke::AttributeWriter<float> faw =
       mesh->attributes_for_write().lookup_or_add_for_write<float>(harnack_tag, ATTR_DOMAIN_POINT);
@@ -87,6 +88,16 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
 
   if (smd->clip_y) {
     faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(clip_tag, ATTR_DOMAIN_POINT);
+    faw.varray.set(0, 1);
+  }
+  if (smd->use_overstepping) {
+    faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(overstepping_tag,
+                                                                      ATTR_DOMAIN_POINT);
+    faw.varray.set(0, 1);
+  }
+  if (smd->use_newton) {
+    faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(newton_tag,
+                                                                      ATTR_DOMAIN_POINT);
     faw.varray.set(0, 1);
   }
   if (smd->capture_misses) {
