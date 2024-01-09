@@ -223,6 +223,78 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
   return false;  // no intersection
 }
 
+// compute solid angle of loop starting at pts[iStart] with length N,
+// evaluated at point x, and adds the gradient to *grad, computed as follows:
+// grad_mode: 0 - nicole formula
+//            1 - none
+//            2 - architecture formula
+// (if grad == nullptr, gradient is not computed anyway)
+template<typename T>
+T triangulated_loop_solid_angle(const packed_float3 *pts,
+                                uint iStart,
+                                uint N,
+                                const std::array<T, 3> &x,
+                                std::array<T, 3> *grad,
+                                int grad_mode = 0,
+                                bool use_quick_triangulation = false)
+{
+  using T3 = std::array<T, 3>;
+
+  // compute the vectors xp from the evaluation point x
+  // to all the polygon vertices, and their lengths Lp
+  std::vector<T3> xp;
+  xp.reserve(N + 1);
+  std::vector<T> Lp;
+  Lp.reserve(N + 1);
+  for (uint i = 0; i < N + 1; i++) {  // center = pts[N]
+    xp.push_back(diff_f(pts[iStart + i], x));
+    Lp.push_back(len(xp[i]));
+  }
+
+  // Iterate over triangles used to triangulate the polygon
+  std::complex<T> running_angle{1., 0.};
+  uint start = use_quick_triangulation ? 2 : 0;
+  for (uint i = start; i < N; i++) {
+    int a = i;
+    int b = (i + 1) % N;
+    int c = N;
+
+    T3 n = cross(xp[a], xp[b]);
+
+    // Add the solid angle of this triangle to the total
+    std::complex<T> tri_angle{Lp[a] * Lp[b] * Lp[c] + dot(xp[a], xp[b]) * Lp[c] +
+                                  dot(xp[b], xp[c]) * Lp[a] + dot(xp[a], xp[c]) * Lp[b],
+                              dot(xp[c], n)};
+    running_angle *= tri_angle;
+
+    //== compute gradient
+    if (grad) {
+      if (grad_mode == 0) {
+        const T3 &g0 = xp[a];
+        const T3 &g1 = xp[b];
+        T n2 = len_squared(n);
+        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
+                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
+        (*grad)[0] += n[0] / n2 * scale;
+        (*grad)[1] += n[1] / n2 * scale;
+        (*grad)[2] += n[2] / n2 * scale;
+      }
+      else {
+        const T3 &v = xp[a];
+        const T3 &w = xp[b];
+        T lv = len(v);
+        T lw = len(w);
+        T scale = (lv + lw) / (lv * lw + dot(v, w));
+        (*grad)[0] += n[0] * scale;
+        (*grad)[1] += n[1] * scale;
+        (*grad)[2] += n[2] * scale;
+      }
+    }
+  }
+
+  return 2 * std::arg(running_angle);
+}
+
 typedef struct solid_angle_intersection_params {
   float3 ray_P;
   float3 ray_D;
@@ -242,6 +314,7 @@ typedef struct solid_angle_intersection_params {
   bool use_overstepping;
   bool use_extrapolation;
   bool use_newton;
+  bool use_quick_triangulation;
   float epsilon_loose;
 } solid_angle_intersection_params;
 
@@ -454,58 +527,15 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     return std::min(lo_r, up_r);
   };
 
-  // returns solid angle of loop iL and adds gradient to grad
-  auto triangulated_loop_solid_angle = [&](uint iL, const T3 &x, T3 &grad) -> T {
-    uint iStart = params.loops[iL].x - globalStart;
-    uint N = params.loops[iL].y;
-
-    // compute the vectors xp from the evaluation point x
-    // to all the polygon vertices, and their lengths Lp
-    std::vector<T3> xp;
-    xp.reserve(N + 1);
-    std::vector<T> Lp;
-    Lp.reserve(N + 1);
-    for (uint i = 0; i < N + 1; i++) {  // center = pts[N]
-      xp.push_back(diff_f(params.pts[iStart + i], x));
-      Lp.push_back(len(xp[i]));
-    }
-
-    // Iterate over triangles used to triangulate the polygon
-    std::complex<T> running_angle{1., 0.};
-    for (uint i = 0; i < N; i++) {
-      int a = i;
-      int b = (i + 1) % N;
-      int c = N;
-
-      T3 n = cross(xp[a], xp[b]);
-
-      // Add the solid angle of this triangle to the total
-      std::complex<T> tri_angle{Lp[a] * Lp[b] * Lp[c] + dot(xp[a], xp[b]) * Lp[c] +
-                                    dot(xp[b], xp[c]) * Lp[a] + dot(xp[a], xp[c]) * Lp[b],
-                                dot(xp[c], n)};
-      running_angle *= tri_angle;
-
-      //== compute gradient
-      if (params.use_grad_termination) {
-        const T3 &g0 = xp[a];
-        const T3 &g1 = xp[b];
-        T n2 = len_squared(n);
-        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
-                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
-        grad[0] += n[0] / n2 * scale;
-        grad[1] += n[1] / n2 * scale;
-        grad[2] += n[2] / n2 * scale;
-      }
-    }
-
-    return 2 * std::arg(running_angle);
-  };
-
   // sums solid angle of polygon loops and adds gradient to grad
   auto triangulated_solid_angle = [&](const T3 &x, T3 &grad) -> T {
     T omega = 0;
-    for (uint iL : polygonLoops)
-      omega += triangulated_loop_solid_angle(iL, x, grad);
+    for (uint iL : polygonLoops) {
+      uint iStart = params.loops[iL].x - globalStart;
+      uint N = params.loops[iL].y;
+      omega += triangulated_loop_solid_angle(
+          params.pts, iStart, N, x, &grad, 0, params.use_quick_triangulation);
+    }
     return omega;
   };
 
