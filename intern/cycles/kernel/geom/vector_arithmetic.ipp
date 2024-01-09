@@ -1,6 +1,7 @@
 namespace {
 using f3 = std::array<float, 3>;
 using f4 = std::array<float, 4>;
+
 float dot(const f3 &a, const f3 &b)
 {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -121,7 +122,8 @@ f4 dihedral(const f3 &p1, const f3 &p2)
   // can skip normalization since we don't care about magnitude
   return build_T4(dot(p1, p2) + lengthProduct, cross(p1, p2));
 }
-// arg(\bar{q2} q1) as defined by Chern & Ishida https://arxiv.org/abs/2303.14555
+// arg(\bar{q2} q1) as defined by Chern & Ishida
+// https://arxiv.org/abs/2303.14555
 float fiberArg(const f4 &q1, const f4 &q2)
 {
   f4 s = q_mul(q_conj(q2), q1);
@@ -130,6 +132,7 @@ float fiberArg(const f4 &q1, const f4 &q2)
 
 using d3 = std::array<double, 3>;
 using d4 = std::array<double, 4>;
+
 double dot(const d3 &a, const d3 &b)
 {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -254,10 +257,24 @@ d4 dihedral(const d3 &p1, const d3 &p2)
   // can skip normalization since we don't care about magnitude
   return build_T4(dot(p1, p2) + lengthProduct, cross(p1, p2));
 }
-// arg(\bar{q2} q1) as defined by Chern & Ishida https://arxiv.org/abs/2303.14555
+// arg(\bar{q2} q1) as defined by Chern & Ishida
+// https://arxiv.org/abs/2303.14555
 double fiberArg(const d4 &q1, const d4 &q2)
 {
   d4 s = q_mul(q_conj(q2), q1);
   return atan2(s[1], s[0]);
+}
+
+template<typename T> std::array<T, 3> from_float3(const float3 &p)
+{
+  return {(T)p.x, (T)p.y, (T)p.z};
+}
+
+template<typename T> std::ostream &operator<<(std::ostream &o, const std::array<T, 3> &v)
+{
+  o << "(" << std::setw(8) << std::fixed << std::setprecision(4) << v[0] << ", " << std::setw(8)
+    << std::fixed << std::setprecision(4) << v[1] << ", " << std::setw(8) << std::fixed
+    << std::setprecision(4) << v[2] << ")";
+  return o;
 }
 }  // namespace

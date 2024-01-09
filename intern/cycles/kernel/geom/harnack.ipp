@@ -27,14 +27,13 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
     ccl_private float *isect_t)
 {
   using T3 = std::array<T, 3>;
-  auto from_float3 = [](const float3 &p) -> T3 { return {(T)p.x, (T)p.y, (T)p.z}; };
 
   T epsilon = static_cast<T>(params.epsilon);
   T frequency = static_cast<T>(params.frequency);
   T levelset = static_cast<T>(params.levelset);
 
-  T3 ray_P = from_float3(params.ray_P);
-  T3 ray_D = from_float3(params.ray_D);
+  T3 ray_P = from_float3<T>(params.ray_P);
+  T3 ray_D = from_float3<T>(params.ray_D);
 
   T ray_tmin = static_cast<T>(params.ray_tmin);
   T ray_tmax = static_cast<T>(params.ray_tmax);
@@ -223,6 +222,22 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
   return false;  // no intersection
 }
 
+// Fractional mod function that behaves the same as in GLSL
+template<typename T> T glsl_mod(T x, T y)
+{
+  return x - y * std::floor(x / y);
+}
+
+template<typename T>
+bool close_to_zero(
+    T ang, T lo_bound, T hi_bound, T tol, const std::array<T, 3> &grad, bool use_grad_termination)
+{
+  // Check if an angle is within epsilon of 0 or 4π
+  T dis = fmin(ang - lo_bound, hi_bound - ang);
+  T tolScaling = use_grad_termination ? len(grad) : 1;
+  return dis < tol * tolScaling;
+};
+
 // compute solid angle of loop starting at pts[iStart] with length N,
 // evaluated at point x, and adds the gradient to *grad, computed as follows:
 // grad_mode: 0 - nicole formula
@@ -295,6 +310,408 @@ T triangulated_loop_solid_angle(const packed_float3 *pts,
   return 2 * std::arg(running_angle);
 }
 
+// compute solid angle all loops in list polygonLoops evaluated at point x,
+// and adds the gradient to *grad, computed as follows:
+// grad_mode: 0 - nicole formula
+//            1 - none
+//            2 - architecture formula
+// (if grad == nullptr, gradient is not computed anyway)
+template<typename T>
+T triangulated_solid_angle(const packed_float3 *pts,
+                           const packed_uint3 *loops,
+                           uint globalStart,
+                           const std::vector<uint> &polygonLoops,
+                           const std::array<T, 3> &x,
+                           std::array<T, 3> *grad,
+                           int grad_mode = 0,
+                           bool use_quick_triangulation = false)
+{
+  T omega = 0;
+  for (uint iL : polygonLoops) {
+    uint iStart = loops[iL].x - globalStart;
+    uint N = loops[iL].y;
+
+    omega += triangulated_loop_solid_angle<T>(
+        pts, iStart, N, x, grad, grad_mode, use_quick_triangulation);
+  }
+
+  return omega;
+}
+
+// compute solid angle of loop starting at pts[iStart] with length N,
+// evaluated at point x, using the prequantum formula and adds the gradient to
+// *grad, computed as follows: grad_mode: 0 - nicole formula
+//            1 - none
+//            2 - architecture formula
+// (if grad == nullptr, gradient is not computed anyway)
+template<typename T>
+T prequantum_loop_solid_angle(const packed_float3 *pts,
+                              uint iStart,
+                              uint N,
+                              const std::array<T, 3> &x,
+                              std::array<T, 3> *grad,
+                              int grad_mode = 0)
+{
+  using T3 = std::array<T, 3>;
+  using T4 = std::array<T, 4>;
+
+  // compute the vectors xp from the evaluation point x
+  // to all the polygon vertices, and their lengths Lp
+  std::vector<T3> xp;
+  xp.reserve(N);
+  std::vector<T> Lp;
+  Lp.reserve(N);
+  for (uint i = 0; i < N; i++) {
+    xp.push_back(diff_f(pts[iStart + i], x));
+    Lp.push_back(len(xp[i]));
+  }
+
+  int start = 0;
+  T4 q0 = dihedral(T3{1., 0., 0.},
+                   xp[start]);  // point in fiber of points[start]-x
+  T4 qi = q0;
+  for (uint i = 0; i < N; i++) {
+    int a = i;
+    int b = (i + 1) % N;
+    T4 d = dihedral(xp[a], xp[b]);
+    qi = q_mul(d, qi);
+
+    //== compute gradient
+    if (grad) {
+      if (grad_mode == 0) {
+        const T3 &g0 = xp[a];
+        const T3 &g1 = xp[b];
+        T3 n = cross(g0, g1);
+        T n2 = len_squared(n);
+        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
+                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
+        (*grad)[0] += n[0] / n2 * scale;
+        (*grad)[1] += n[1] / n2 * scale;
+        (*grad)[2] += n[2] / n2 * scale;
+      }
+      else {
+        const T3 &v = xp[a];
+        const T3 &w = xp[b];
+        T3 n = cross(v, w);
+        T lv = len(v);
+        T lw = len(w);
+        T scale = (lv + lw) / (lv * lw + dot(v, w));
+        (*grad)[0] += n[0] * scale;
+        (*grad)[1] += n[1] * scale;
+        (*grad)[2] += n[2] * scale;
+      }
+    }
+  }
+
+  return static_cast<T>(-2.) * fiberArg(q0, qi);
+}
+
+// compute solid angle via prequantum formula for all loops in list polygonLoops
+// evaluated at point x, and adds the gradient to *grad, computed as follows:
+// grad_mode: 0 - nicole formula
+//            1 - none
+//            2 - architecture formula
+// (if grad == nullptr, gradient is not computed anyway)
+template<typename T>
+T prequantum_solid_angle(const packed_float3 *pts,
+                         const packed_uint3 *loops,
+                         uint globalStart,
+                         const std::vector<uint> &polygonLoops,
+                         const std::array<T, 3> &x,
+                         std::array<T, 3> *grad,
+                         int grad_mode = 0)
+{
+  T omega = 0;
+  for (uint iL : polygonLoops) {
+    uint iStart = loops[iL].x - globalStart;
+    uint N = loops[iL].y;
+
+    omega += prequantum_loop_solid_angle<T>(pts, iStart, N, x, grad, grad_mode);
+  }
+
+  return omega;
+}
+
+// compute solid angle of loop starting at pts[iStart] with length N,
+// evaluated at point x, using the gauss-bonnet formula and adds the gradient to
+// *grad, computed as follows: grad_mode: 0 - nicole formula
+//            1 - none
+//            2 - architecture formula
+// (if grad == nullptr, gradient is not computed anyway)
+template<typename T>
+T gauss_bonnet_loop_solid_angle(const packed_float3 *pts,
+                                uint iStart,
+                                uint N,
+                                const std::array<T, 3> &x,
+                                std::array<T, 3> *grad,
+                                int grad_mode = 0)
+{
+  using T3 = std::array<T, 3>;
+
+  // compute the vectors xp from the evaluation point x
+  // to all the polygon vertices, and their lengths Lp
+  std::vector<T3> xp;
+  xp.reserve(N);
+  std::vector<T> Lp;
+  Lp.reserve(N);
+  for (uint i = 0; i < N; i++) {
+    xp.push_back(diff_f(pts[iStart + i], x));
+    Lp.push_back(len(xp[i]));
+  }
+
+  // Iterate over triangles used to triangulate the polygon
+  T total_angle = 0.;
+  for (uint i = 0; i < N; i++) {
+    int a = (i + N - 1) % N;
+    int b = i;
+    int c = (i + 1) % N;
+    T3 n_prev = cross(xp[a], xp[b]);
+    T3 n_next = cross(xp[b], xp[c]);
+
+    total_angle += atan2(dot(xp[b], cross(n_prev, n_next)) / Lp[b], dot(n_prev, n_next));
+
+    //== compute gradient
+    if (grad) {
+      if (grad_mode == 0) {
+        const T3 &g0 = xp[a];
+        const T3 &g1 = xp[b];
+        const T3 &n = n_prev;
+        T n2 = len_squared(n);
+        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
+                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
+        (*grad)[0] += n[0] / n2 * scale;
+        (*grad)[1] += n[1] / n2 * scale;
+        (*grad)[2] += n[2] / n2 * scale;
+      }
+      else {
+        const T3 &v = xp[a];
+        const T3 &w = xp[b];
+        const T3 &n = n_prev;
+        T lv = len(v);
+        T lw = len(w);
+        T scale = (lv + lw) / (lv * lw + dot(v, w));
+        (*grad)[0] += n[0] * scale;
+        (*grad)[1] += n[1] * scale;
+        (*grad)[2] += n[2] * scale;
+      }
+    }
+  }
+  return static_cast<T>(2. * M_PI) - total_angle;
+}
+
+// compute solid angle via gauss-bonnet for all loops in list polygonLoops
+// evaluated at point x, and adds the gradient to *grad, computed as follows:
+// grad_mode: 0 - nicole formula
+//            1 - none
+//            2 - architecture formula
+// (if grad == nullptr, gradient is not computed anyway)
+template<typename T>
+T gauss_bonnet_solid_angle(const packed_float3 *pts,
+                           const packed_uint3 *loops,
+                           uint globalStart,
+                           const std::vector<uint> &polygonLoops,
+                           const std::array<T, 3> &x,
+                           std::array<T, 3> *grad,
+                           int grad_mode = 0)
+{
+  T omega = 0;
+  for (uint iL : polygonLoops) {
+    uint iStart = loops[iL].x - globalStart;
+    uint N = loops[iL].y;
+
+    omega += gauss_bonnet_loop_solid_angle<T>(pts, iStart, N, x, grad, grad_mode);
+  }
+
+  return omega;
+}
+
+// compute solid angle bonnet for all loops in list polygonLoops
+// evaluated at point x,computed as follows:
+// solid_angle_mode: 0 - triangulated
+//                   1 - prequantum
+//                   2 - gauss-bonnet
+// and adds the gradient to *grad, computed as follows:
+// grad_mode: 0 - nicole formula
+//            1 - none
+//            2 - architecture formula
+// (if grad == nullptr, gradient is not computed anyway)
+template<typename T>
+T polygon_solid_angle(const packed_float3 *pts,
+                      const packed_uint3 *loops,
+                      uint globalStart,
+                      const std::vector<uint> &polygonLoops,
+                      const std::array<T, 3> &x,
+                      int solid_angle_mode,
+                      std::array<T, 3> *grad,
+                      int grad_mode = 0,
+                      bool use_quick_triangulation = false)
+{
+  switch (solid_angle_mode) {
+    case 0:
+      return triangulated_solid_angle(
+          pts, loops, globalStart, polygonLoops, x, grad, grad_mode, use_quick_triangulation);
+    case 1:
+      return prequantum_solid_angle(pts, loops, globalStart, polygonLoops, x, grad, grad_mode);
+    case 2:
+      return gauss_bonnet_solid_angle(pts, loops, globalStart, polygonLoops, x, grad, grad_mode);
+    default:
+      throw std::runtime_error("Unrecognized solid angle mode: '" +
+                               std::to_string(solid_angle_mode) + "'");
+      return 0;
+  }
+}
+
+// compute solid angle of given disk,
+// evaluated at point x. If grad is not null, adds the gradient to *grad
+template<typename T>
+T disk_solid_angle(const std::array<T, 3> &x,
+                   std::array<T, 3> *grad,
+                   const std::array<T, 3> &disk_center,
+                   const std::array<T, 3> &disk_normal,
+                   T disk_radius)
+{
+  using T3 = std::array<T, 3>;
+  //     Input, double ERRTOL, the error tolerance.
+  //     Relative error due to truncation is less than
+  //       ERRTOL ^ 6 / (4 * (1 - ERRTOL)).
+  //     Sample choices:
+  //       ERRTOL   Relative truncation error less than
+  //       1.D-3    3.D-19
+  //       3.D-3    2.D-16
+  //       1.D-2    3.D-13
+  //       3.D-2    2.D-10
+  //       1.D-1    3.D-7
+  // double elliptic_errtol = 0.75;
+  double elliptic_errtol = 0.01;
+
+  // Formulas from Solid Angle Calculation for a Circular Disk by Paxton
+  // 1959
+  T3 displacement = diff(x, disk_center);  // might need to switch to diff_f
+  const T3 &zHat = disk_normal;
+  T L = dot(displacement, zHat);
+  T3 inPlane = fma(displacement, -L, zHat);
+  T r0 = len(inPlane);
+  T sign = copysign(1, L);
+  T aL = std::abs(L);  // use absolute value of length when evaluating solid
+                       // angle to shift branch cut to the horizontal plane
+  T rm = disk_radius;
+  T alphaSq = 4. * r0 * rm / std::pow(r0 + rm, 2);
+  T R1Sq = std::pow(L, 2) + std::pow(r0 - rm, 2);
+  T Rmax = std::sqrt(std::pow(L, 2) + std::pow(r0 + rm, 2));
+  T kSq = 1 - R1Sq / (Rmax * Rmax);
+  T3 rHat = over(inPlane, r0);
+
+  T F = elliptic_fm(kSq, elliptic_errtol);
+
+  // TODO: adjust tolerance
+  // ( When r0 and rm are too close, alphaSq goes to 1, which leads to a
+  // singularity in elliptic_pim )
+  T omega;
+  if (std::abs(r0 - rm) < 1e-3) {
+    omega = sign * (M_PI - 2 * aL / Rmax * F);
+  }
+  else if (r0 < rm) {
+    omega = sign *
+            (2 * M_PI - 2 * aL / Rmax * F +
+             2 * aL / Rmax * (r0 - rm) / (r0 + rm) * elliptic_pim(alphaSq, kSq, elliptic_errtol));
+  }
+  else if (r0 > rm) {
+    omega = sign * (-2 * aL / Rmax * F + 2 * aL / Rmax * (r0 - rm) / (r0 + rm) *
+                                             elliptic_pim(alphaSq, kSq, elliptic_errtol));
+  }
+
+  if (grad) {
+    T E = elliptic_em(kSq, elliptic_errtol);
+    T Br = -2 * aL / (r0 * Rmax) * (-F + (rm * rm + r0 * r0 + aL * aL) / R1Sq * E);
+    T Bz = -2 / (Rmax) * (F + (rm * rm - r0 * r0 - aL * aL) / R1Sq * E);
+
+    for (size_t i = 0; i < 3; i++)
+      (*grad)[i] += sign * Br * rHat[i] + Bz * zHat[i];
+  }
+  return omega;
+}
+
+// classify each loop as a polygon or as an disk
+// HACK: count a polygon as a disk if it has five sides, and is
+// disk-inscribed
+template<typename T>
+void classify_loops(const packed_float3 *const pts,
+                    const packed_uint3 *const loops,
+                    uint n_loops,
+                    uint global_start,
+                    std::vector<uint> *polygon_loops,
+                    std::vector<std::array<T, 3>> *disk_centers,
+                    std::vector<std::array<T, 3>> *disk_normals,
+                    std::vector<T> *disk_radii)
+{
+  using T3 = std::array<T, 3>;
+
+  for (uint iL = 0; iL < n_loops; iL++) {
+    uint iStart = loops[iL].x - global_start;
+    uint N = loops[iL].y;
+
+    //== Test if loop is "circular", i.e. 5-sided, equidistant from center
+    // point, and planar
+    //     if so, store the center, normal, and radius
+    T3 center, normal;
+    T radius;
+    bool is_circular = true;
+    if (N != 5)
+      is_circular = false;
+
+    if (is_circular) {
+      center = from_float3<T>(pts[iStart + N]);
+
+      // Store displacements from center
+      std::vector<T3> rx;
+      rx.reserve(N);
+      for (uint i = 0; i < N; i++)
+        rx.push_back(diff_f(pts[iStart + i], center));
+
+      // Test if points are equidistant from center, and store radius
+      radius = len(rx[0]);
+      for (uint i = 1; i < N; i++) {
+        T radius_i = len(rx[i]);
+        if (std::abs(radius_i - radius) >= 0.01) {
+          is_circular = false;
+          break;
+        }
+      }
+
+      if (is_circular) {
+        // Test if points are coplanar (and store normal)
+        normal = cross(rx[0], rx[1]);
+        normalize(normal);
+        for (uint i = 1; i < N; i++) {
+          int j = (i + 1) % N;
+          T3 normal_i = cross(rx[i], rx[j]);
+
+          // Check whether or not normal is parallel to normal_i
+          if (std::abs(dot(normal, normal_i) - len(normal) * len(normal_i)) >= 0.01) {
+            is_circular = false;
+            break;
+          }
+        }
+      }
+    }
+
+    if (is_circular) {
+      // if we got here, the loop is circular. Store it as a disk
+      if (disk_centers)
+        disk_centers->push_back(center);
+      if (disk_normals)
+        disk_normals->push_back(normal);
+      if (disk_radii)
+        disk_radii->push_back(radius);
+    }
+    else {
+      // if loop was not determined to be circular, record it as a polygon
+      if (polygon_loops)
+        polygon_loops->push_back(iL);
+    }
+  }
+}
+
 typedef struct solid_angle_intersection_params {
   float3 ray_P;
   float3 ray_D;
@@ -316,11 +733,13 @@ typedef struct solid_angle_intersection_params {
   bool use_newton;
   bool use_quick_triangulation;
   float epsilon_loose;
+  bool fixed_step_count;
 } solid_angle_intersection_params;
 
 typedef struct acceleration_stats {
   // general
   int total_iterations = 0;
+  std::vector<float> ts, vals;
   // oversteps
   int successful_oversteps = 0;
   int failed_oversteps = 0;
@@ -335,7 +754,6 @@ typedef struct acceleration_stats {
   std::vector<float> newton_dts, newton_dfs, newton_ts, newton_vals;
 } acceleration_stats;
 
-static bool printed_disk_normal = false;
 template<typename T>
 ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection_params &params,
                                                   ccl_private float *isect_u,
@@ -344,16 +762,14 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
                                                   acceleration_stats *stats = nullptr)
 {
   using T3 = std::array<T, 3>;
-  using T4 = std::array<T, 4>;
-  auto from_float3 = [](const float3 &p) -> T3 { return {(T)p.x, (T)p.y, (T)p.z}; };
 
   T epsilon = static_cast<T>(params.epsilon);
   T frequency = static_cast<T>(params.frequency);
   T levelset = static_cast<T>(params.levelset);
   T shift = 4. * M_PI;
 
-  T3 ray_P = from_float3(params.ray_P);
-  T3 ray_D = from_float3(params.ray_D);
+  T3 ray_P = from_float3<T>(params.ray_P);
+  T3 ray_D = from_float3<T>(params.ray_D);
   uint globalStart = params.loops[0].x;
 
   T ray_tmin = static_cast<T>(params.ray_tmin);
@@ -371,89 +787,18 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     }
   }
 
-  // classify each loop as a polygon or as an disk
-  // HACK: count a polygon as a disk if it has five sides, and is
-  // disk-inscribed
   std::vector<uint> polygonLoops;
   std::vector<T3> diskCenters, diskNormals;
   std::vector<T> diskRadii;
-  for (uint iL = 0; iL < params.n_loops; iL++) {
-    uint iStart = params.loops[iL].x - globalStart;
-    uint N = params.loops[iL].y;
 
-    //== Test if loop is "circular", i.e. 5-sided, equidistant from center
-    // point, and planar
-    //     if so, store the center, normal, and radius
-    T3 center, normal;
-    T radius;
-    bool isCircular = true;
-    if (N != 5)
-      isCircular = false;
-
-    if (isCircular) {
-      center = from_float3(params.pts[iStart + N]);
-
-      // Store displacements from center
-      std::vector<T3> rx;
-      rx.reserve(N);
-      for (uint i = 0; i < N; i++)
-        rx.push_back(diff_f(params.pts[iStart + i], center));
-
-      // Test if points are equidistant from center, and store radius
-      radius = len(rx[0]);
-      for (uint i = 1; i < N; i++) {
-        T radius_i = len(rx[i]);
-        if (std::abs(radius_i - radius) >= 0.01) {
-          isCircular = false;
-          break;
-        }
-      }
-
-      if (isCircular) {
-        // Test if points are coplanar (and store normal)
-        normal = cross(rx[0], rx[1]);
-        normalize(normal);
-        for (uint i = 1; i < N; i++) {
-          int j = (i + 1) % N;
-          T3 normal_i = cross(rx[i], rx[j]);
-
-          // Check whether or not normal is parallel to normal_i
-          if (std::abs(dot(normal, normal_i) - len(normal) * len(normal_i)) >= 0.01) {
-            isCircular = false;
-            break;
-          }
-        }
-      }
-    }
-
-    if (isCircular) {
-      // if we got here, the loop is circular. Store it as a disk
-      diskCenters.push_back(center);
-      diskNormals.push_back(normal);
-      diskRadii.push_back(radius);
-
-      if (!printed_disk_normal) {
-        std::cout << ("normal: (" + std::to_string(normal[0]) + ", " + std::to_string(normal[1]) +
-                      ", " + std::to_string(normal[2]) + ")")
-                  << std::endl;
-        printed_disk_normal = true;
-      }
-    }
-    else {
-      // if loop was not determined to be circular, record it as a polygon
-      polygonLoops.push_back(iL);
-    }
-  }
-
-  // Fractional mod function that behaves the same as in GLSL
-  auto glsl_mod = [](T x, T y) -> T { return x - y * std::floor(x / y); };
-
-  auto close_to_zero = [&](T ang, T lo_bound, T hi_bound, T tol, const T3 &grad) -> bool {
-    // Check if an angle is within epsilon of 0 or 4π
-    T dis = fmin(ang - lo_bound, hi_bound - ang);
-    T tolScaling = params.use_grad_termination ? len(grad) : 1;
-    return dis < tol * tolScaling;
-  };
+  classify_loops(params.pts,
+                 params.loops,
+                 params.n_loops,
+                 globalStart,
+                 &polygonLoops,
+                 &diskCenters,
+                 &diskNormals,
+                 &diskRadii);
 
   // update min_d2, closest_point, and tangent if any closer point is present
   // on loop iL. closest_point and tangent may be null, but min_d2 must not be
@@ -464,8 +809,8 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
 
         // compute closest distance to each polygon line segment
         for (uint i = 0; i < N; i++) {
-          T3 p1 = from_float3(params.pts[iStart + i]);
-          T3 p2 = from_float3(params.pts[iStart + (i + 1) % N]);
+          T3 p1 = from_float3<T>(params.pts[iStart + i]);
+          T3 p2 = from_float3<T>(params.pts[iStart + (i + 1) % N]);
           T3 m = diff(p2, p1);
           T3 v = diff(x, p1);
           // dot = |a|*|b|cos(theta) * n, isolating |a|sin(theta)
@@ -527,189 +872,22 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     return std::min(lo_r, up_r);
   };
 
-  // sums solid angle of polygon loops and adds gradient to grad
-  auto triangulated_solid_angle = [&](const T3 &x, T3 &grad) -> T {
-    T omega = 0;
-    for (uint iL : polygonLoops) {
-      uint iStart = params.loops[iL].x - globalStart;
-      uint N = params.loops[iL].y;
-      omega += triangulated_loop_solid_angle(
-          params.pts, iStart, N, x, &grad, 0, params.use_quick_triangulation);
-    }
-    return omega;
-  };
-
-  // returns solid angle of loop iL and adds gradient to grad
-  auto prequantum_loop_solid_angle = [&](uint iL, const T3 &x, T3 &grad) -> T {
-    uint iStart = params.loops[iL].x - globalStart;
-    uint N = params.loops[iL].y;
-
-    // compute the vectors xp from the evaluation point x
-    // to all the polygon vertices, and their lengths Lp
-    std::vector<T3> xp;
-    xp.reserve(N);
-    std::vector<T> Lp;
-    Lp.reserve(N);
-    for (uint i = 0; i < N; i++) {
-      xp.push_back(diff_f(params.pts[iStart + i], x));
-      Lp.push_back(len(xp[i]));
-    }
-
-    int start = 0;
-    T4 q0 = dihedral(T3{1., 0., 0.},
-                     xp[start]);  // point in fiber of points[start]-x
-    T4 qi = q0;
-    for (uint i = 0; i < N; i++) {
-      int a = i;
-      int b = (i + 1) % N;
-      T4 d = dihedral(xp[a], xp[b]);
-      qi = q_mul(d, qi);
-
-      //== compute gradient
-      if (params.use_grad_termination) {
-        const T3 &g0 = xp[a];
-        const T3 &g1 = xp[b];
-        T3 n = cross(g0, g1);
-        T n2 = len_squared(n);
-        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
-                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
-        grad[0] -= n[0] / n2 * scale;
-        grad[1] -= n[1] / n2 * scale;
-        grad[2] -= n[2] / n2 * scale;
-      }
-    }
-
-    return static_cast<T>(-2.) * fiberArg(q0, qi);
-  };
-
-  // sums solid angle of polygon loops and adds gradient to grad
-  auto prequantum_solid_angle = [&](const T3 &x, T3 &grad) -> T {
-    T omega = 0;
-    for (uint iL : polygonLoops)
-      omega += prequantum_loop_solid_angle(iL, x, grad);
-    return omega;
-  };
-
-  // returns solid angle of loop iL and adds gradient to grad
-  auto gauss_bonnet_loop_solid_angle = [&](uint iL, const T3 &x, T3 &grad) -> T {
-    uint iStart = params.loops[iL].x - globalStart;
-    uint N = params.loops[iL].y;
-
-    // compute the vectors xp from the evaluation point x
-    // to all the polygon vertices, and their lengths Lp
-    std::vector<T3> xp;
-    xp.reserve(N);
-    std::vector<T> Lp;
-    Lp.reserve(N);
-    for (uint i = 0; i < N; i++) {
-      xp.push_back(diff_f(params.pts[iStart + i], x));
-      Lp.push_back(len(xp[i]));
-    }
-
-    // Iterate over triangles used to triangulate the polygon
-    T total_angle = 0.;
-    for (uint i = 0; i < N; i++) {
-      int a = (i + N - 1) % N;
-      int b = i;
-      int c = (i + 1) % N;
-      T3 n_prev = cross(xp[a], xp[b]);
-      T3 n_next = cross(xp[b], xp[c]);
-
-      total_angle += atan2(dot(xp[b], cross(n_prev, n_next)) / Lp[b], dot(n_prev, n_next));
-
-      //== compute gradient
-      if (params.use_grad_termination) {
-        const T3 &g0 = xp[a];
-        const T3 &g1 = xp[b];
-        T n2 = len_squared(n_prev);
-        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
-                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
-        grad[0] -= n_prev[0] / n2 * scale;
-        grad[1] -= n_prev[1] / n2 * scale;
-        grad[2] -= n_prev[2] / n2 * scale;
-      }
-    }
-    return static_cast<T>(2. * M_PI) - total_angle;
-  };
-
-  // sums solid angle of polygon loops and adds gradient to grad
-  auto gauss_bonnet_solid_angle = [&](const T3 &x, T3 &grad) -> T {
-    T omega = 0;
-    for (uint iL : polygonLoops)
-      omega += gauss_bonnet_loop_solid_angle(iL, x, grad);
-    return omega;
-  };
-
-  // returns solid angle of disk iD and adds gradient to grad
-  auto disk_solid_angle = [&](uint iD, const T3 &x, T3 &grad) -> T {
-    //     Input, double ERRTOL, the error tolerance.
-    //     Relative error due to truncation is less than
-    //       ERRTOL ^ 6 / (4 * (1 - ERRTOL)).
-    //     Sample choices:
-    //       ERRTOL   Relative truncation error less than
-    //       1.D-3    3.D-19
-    //       3.D-3    2.D-16
-    //       1.D-2    3.D-13
-    //       3.D-2    2.D-10
-    //       1.D-1    3.D-7
-    // double elliptic_errtol = 0.75;
-    double elliptic_errtol = 0.01;
-
-    // Formulas from Solid Angle Calculation for a Circular Disk by Paxton
-    // 1959
-    T3 displacement = diff(x, diskCenters[iD]);  // might need to switch to diff_f
-    const T3 &zHat = diskNormals[iD];
-    T L = dot(displacement, diskNormals[iD]);
-    T3 inPlane = fma(displacement, -L, zHat);
-    T r0 = len(inPlane);
-    T sign = copysign(1, L);
-    T aL = std::abs(L);  // use absolute value of length when evaluating solid
-                         // angle to shift branch cut to the horizontal plane
-    T rm = diskRadii[iD];
-    T alphaSq = 4. * r0 * rm / std::pow(r0 + rm, 2);
-    T R1Sq = std::pow(L, 2) + std::pow(r0 - rm, 2);
-    T Rmax = std::sqrt(std::pow(L, 2) + std::pow(r0 + rm, 2));
-    T kSq = 1 - R1Sq / (Rmax * Rmax);
-    T3 rHat = over(inPlane, r0);
-
-    T F = elliptic_fm(kSq, elliptic_errtol);
-
-    // TODO: adjust tolerance
-    // ( When r0 and rm are too close, alphaSq goes to 1, which leads to a
-    // singularity in elliptic_pim )
-    T omega;
-    if (std::abs(r0 - rm) < 1e-3) {
-      omega = sign * (M_PI - 2 * aL / Rmax * F);
-    }
-    else if (r0 < rm) {
-      omega = sign * (2 * M_PI - 2 * aL / Rmax * F +
-                      2 * aL / Rmax * (r0 - rm) / (r0 + rm) *
-                          elliptic_pim(alphaSq, kSq, elliptic_errtol));
-    }
-    else if (r0 > rm) {
-      omega = sign * (-2 * aL / Rmax * F + 2 * aL / Rmax * (r0 - rm) / (r0 + rm) *
-                                               elliptic_pim(alphaSq, kSq, elliptic_errtol));
-    }
-
-    if (true) {
-      T E = elliptic_em(kSq, elliptic_errtol);
-      T Br = -2 * aL / (r0 * Rmax) * (-F + (rm * rm + r0 * r0 + aL * aL) / R1Sq * E);
-      T Bz = -2 / (Rmax) * (F + (rm * rm - r0 * r0 - aL * aL) / R1Sq * E);
-
-      for (size_t i = 0; i < 3; i++)
-        (grad)[i] += sign * Br * rHat[i] + Bz * zHat[i];
-    }
-    return omega;
-  };
-
   // sums solid angle of polygon loops and disks and adds gradient to grad
   auto total_solid_angle = [&](const T3 &x, T3 &grad) -> T {
-    T omega = params.solid_angle_formula == 0 ? triangulated_solid_angle(x, grad) :
-              params.solid_angle_formula == 1 ? prequantum_solid_angle(x, grad) :
-                                                gauss_bonnet_solid_angle(x, grad);
+    int grad_mode = params.use_grad_termination ? 0 : 1;
+    grad = T3{0, 0, 0};  // zero out gradient before computing
+    T omega = polygon_solid_angle(params.pts,
+                                  params.loops,
+                                  globalStart,
+                                  polygonLoops,
+                                  x,
+                                  params.solid_angle_formula,
+                                  &grad,
+                                  grad_mode,
+                                  params.use_quick_triangulation);
 
     for (uint iD = 0; iD < diskCenters.size(); iD++)
-      omega += disk_solid_angle(iD, x, grad);
+      omega += disk_solid_angle(x, &grad, diskCenters[iD], diskNormals[iD], diskRadii[iD]);
 
     return omega;
   };
@@ -765,9 +943,15 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     T omega = total_solid_angle(pos, grad);
 
     // To get the most aggressive Harnack bound, we first find a
-    // representative of the solid angle, shifted by the target level set
-    // value, within the range [0,4π).  Only then do we apply the shift.
+    // representative of the solid angle, shifted by the target level
+    // set value, within the range [0,4π).  Only then do we apply the
+    // shift.
     T val = glsl_mod(omega - levelset, static_cast<T>(4. * M_PI));
+
+    if (stats) {
+      stats->ts.push_back(t + t_overstep);
+      stats->vals.push_back(val);
+    }
 
     if (frequency > 0) {
       lo_bound = 0;
@@ -793,10 +977,10 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
       }
     }
 
-    // Calculate the radius of a ball around the current point over which
-    // we know the function is harmonic.  An easy way to identify such a
-    // ball is to restrict to the sphere touching the closest point on the
-    // polygon boundary.
+    // Calculate the radius of a ball around the current point over
+    // which we know the function is harmonic.  An easy way to identify
+    // such a ball is to restrict to the sphere touching the closest
+    // point on the polygon boundary.
     T3 closestPoint;
     T R = distance_to_boundary(pos, &closestPoint, nullptr);
 
@@ -813,10 +997,12 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     if (r >= t_overstep) {  // commit to step
       // If we're close enough to the level set, or we've exceeded the
       // maximum number of iterations, assume there's a hit.
-      if (close_to_zero(val, lo_bound, hi_bound, epsilon, grad) || R < epsilon ||
-          iter > params.max_iterations)
+      if (!params.fixed_step_count &&
+          (close_to_zero(val, lo_bound, hi_bound, epsilon, grad, params.use_grad_termination) ||
+           R < epsilon || iter > params.max_iterations))
       {
-        // if (R < epsilon)   grad = pos - closestPoint; // TODO: this?
+        // if (R < epsilon)   grad = pos - closestPoint; // TODO:
+        // this?
         *isect_t = t + t_overstep;
         *isect_u = omega / static_cast<T>(4. * M_PI);
         *isect_v = ((T)iter) / ((T)params.max_iterations);
@@ -824,9 +1010,12 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
         return true;
       }
 
-      if (close_to_zero(val, lo_bound, hi_bound, params.epsilon_loose, grad)) {
-        // try newton's method when you first enter the epsilon_loose
-        // shell
+      if (!params.fixed_step_count &&
+          close_to_zero(
+              val, lo_bound, hi_bound, (T)params.epsilon_loose, grad, params.use_grad_termination))
+      {
+        // try newton's method when you first enter the
+        // epsilon_loose shell
         if (params.use_newton && !inside_loose_shell) {
           auto f = [&](T t) -> T {  // also updates grad
             T3 pos = fma(ray_P, t + t_overstep, ray_D);
@@ -860,7 +1049,8 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
                 }
               }
               t_radial += dt;
-              bool close = close_to_zero(val, lo_bound, hi_bound, epsilon, grad);
+              bool close = close_to_zero(
+                  val, lo_bound, hi_bound, epsilon, grad, params.use_grad_termination);
 
               // if (i == 0) {
               //     std::cout << "radial approx: ";
@@ -877,7 +1067,8 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
               //     << "  4π = " << std::setw(8) << 4. * M_PI
               //     << "  dt = " << std::setw(8) << dt
               //     << "  f' = " << std::setw(8) << val
-              //     << " close: " << (close ? "true" : "false");
+              //     << " close: " << (close ? "true" :
+              //     "false");
               // std::cout << std::endl;
               if (close) {
                 *isect_t = t_radial;
@@ -889,7 +1080,8 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
             }
             // t = t_radial;
           }
-          else {  // otherwise, run a few rounds of Newton's method
+          else {  // otherwise, run a few rounds of Newton's
+                  // method
             T t_newton = t + t_overstep;
             for (int i = 0; i < 8; i++) {
               T df = dot(ray_D, grad);
@@ -905,7 +1097,9 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
                 stats->newton_vals.push_back(val);
                 stats->n_newton_steps++;
               }
-              if (close_to_zero(val, lo_bound, hi_bound, epsilon, grad)) {
+              if (close_to_zero(
+                      val, lo_bound, hi_bound, epsilon, grad, params.use_grad_termination))
+              {
                 *isect_t = t_newton;
                 *isect_u = omega / static_cast<T>(4. * M_PI);
                 *isect_v = ((T)iter) / ((T)params.max_iterations);
@@ -921,7 +1115,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
         inside_loose_shell = false;
       }
 
-      if (params.use_extrapolation) {
+      if (!params.fixed_step_count && params.use_extrapolation) {
         // model val(t) = a t + b
         float a = (val - val_prev) / (t + t_overstep - t_prev);
         float b = val - a * t;
@@ -951,7 +1145,9 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
           stats->true_values.push_back(e_val);
         }
         if (0. <= t_test && t_test <= 4. * (t + t_overstep - t_prev)) {
-          if (close_to_zero(e_val, lo_bound, hi_bound, epsilon, e_grad)) {
+          if (close_to_zero(
+                  e_val, lo_bound, hi_bound, epsilon, e_grad, params.use_grad_termination))
+          {
             if (stats)
               stats->successful_extrapolations++;
             return true;
@@ -992,18 +1188,143 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     return false;
   }
 }
+
+template<typename T>
+ccl_device bool newton_intersect_T(const solid_angle_intersection_params &params,
+                                   ccl_private float *isect_u,
+                                   ccl_private float *isect_v,
+                                   ccl_private float *isect_t,
+                                   ccl_private float *t_start = nullptr,
+                                   acceleration_stats *stats = nullptr,
+                                   int verbosity = 0)
+{
+
+  using T3 = std::array<T, 3>;
+
+  T epsilon = static_cast<T>(params.epsilon);
+  T frequency = static_cast<T>(params.frequency);
+  T levelset = static_cast<T>(params.levelset);
+  T shift = 4. * M_PI;
+
+  T3 ray_P = from_float3<T>(params.ray_P);
+  T3 ray_D = from_float3<T>(params.ray_D);
+  uint globalStart = params.loops[0].x;
+
+  T ray_tmin = static_cast<T>(params.ray_tmin);
+  T ray_tmax = static_cast<T>(params.ray_tmax);
+
+  T lo_bound = 0;
+  T hi_bound = 4. * M_PI;
+
+  std::vector<uint> polygonLoops;
+  std::vector<T3> diskCenters, diskNormals;
+  std::vector<T> diskRadii;
+
+  classify_loops(params.pts,
+                 params.loops,
+                 params.n_loops,
+                 globalStart,
+                 &polygonLoops,
+                 &diskCenters,
+                 &diskNormals,
+                 &diskRadii);
+
+  // sums solid angle of polygon loops and disks and adds gradient to grad
+  auto total_solid_angle = [&](const T3 &x, T3 *grad) -> T {
+    if (grad)
+      *grad = T3{0, 0, 0};  // zero out gradient before computing
+    int grad_mode = 0;
+    T omega = polygon_solid_angle(params.pts,
+                                  params.loops,
+                                  globalStart,
+                                  polygonLoops,
+                                  x,
+                                  params.solid_angle_formula,
+                                  grad,
+                                  grad_mode,
+                                  params.use_quick_triangulation);
+
+    for (uint iD = 0; iD < diskCenters.size(); iD++)
+      omega += disk_solid_angle(x, grad, diskCenters[iD], diskNormals[iD], diskRadii[iD]);
+
+    return omega;
+  };
+
+  T3 grad_f;
+  auto f = [&](T t, T3 *grad_f) -> T {
+    T3 pos = fma(ray_P, t, ray_D);
+    T omega = total_solid_angle(pos, grad_f);
+    return glsl_mod(omega - levelset, static_cast<T>(4. * M_PI));
+  };
+
+  int iter = 0;
+  T t = t_start ? *t_start : 0;  // TODO: random starting time?
+  T val = f(t, &grad_f);
+
+  if (verbosity >= 1)
+    std::cout << ">>> initial grad: " << grad_f << std::flush << std::endl;
+
+  auto report_stats = [&]() {
+    if (stats) {
+      stats->total_iterations = iter;
+    }
+  };
+
+  for (int iN = 0; iN < 8; iN++) {
+    T df = dot(ray_D, grad_f);
+    T f_err = (val < 2. * M_PI ? val : val - 4. * M_PI);
+    T dt = -f_err / df;
+    dt = fmin(fmax(dt, -2.), 2.);  // clamp to [-2, 2]
+
+    if (verbosity >= 1) {
+      auto pr = std::setprecision(4);
+      double fpi = 4. * M_PI;
+      std::cout << std::setfill(' ') << std::setw(3) << iN << "| t = " << std::setw(8)
+                << std::fixed << pr << t << "  f = " << std::setw(8) << std::fixed << pr << val
+                << " 4π = " << std::setw(8) << std::fixed << pr << fpi << " dt = " << std::setw(8)
+                << std::fixed << pr << dt << " ferr = " << std::setw(8) << std::fixed << pr
+                << f_err << " df = " << std::setw(8) << std::fixed << pr << df
+                << " pos = " << fma(ray_P, t, ray_D) << " grad_f = " << grad_f << std::endl;
+    }
+
+    t += dt;
+    val = f(t, &grad_f);
+
+    if (stats) {
+      stats->newton_dfs.push_back(df);
+      stats->newton_dts.push_back(dt);
+      stats->newton_ts.push_back(t);
+      stats->newton_vals.push_back(val);
+      stats->n_newton_steps++;
+    }
+    if (close_to_zero(val, lo_bound, hi_bound, epsilon, grad_f, params.use_grad_termination)) {
+      *isect_t = t;
+      *isect_u = val / static_cast<T>(4. * M_PI);
+      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      report_stats();
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /* Normal on nonplanar polygon. */
 // TODO: move to better-named file
 // TODO: deduplicate with version in harnack tracing code?
+
+// int grad_mode; // 0 = nicole formula,
+//                   1 = finite diff,
+//                   2 = architecture formula
 
 template<typename T>
 ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,
                                                  const packed_uint3 *loops,
                                                  const packed_float3 *pts,
-                                                 const uint n_loops)
+                                                 const uint n_loops,
+                                                 int grad_mode = 0)
 {
   using T3 = std::array<T, 3>;
-  auto from_float3 = [](const float3 &p) -> T3 { return {(T)p.x, (T)p.y, (T)p.z}; };
   /* auto smoothstep = [](T x, T start, T end) -> T {  //
    * https://docs.gl/sl4/smoothstep */
   /*   // normalize and clamp to [0, 1] */
@@ -1014,7 +1335,7 @@ ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,
 
   // find solid angle gradient and closest point on boundary curve
   uint globalStart = loops[0].x;
-  T3 p = from_float3(pf);
+  T3 p = from_float3<T>(pf);
 
   // classify each loop as a polygon or as an disk
   // HACK: count a polygon as a disk if it has five sides, and is
@@ -1022,203 +1343,47 @@ ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,
   std::vector<uint> polygonLoops;
   std::vector<T3> diskCenters, diskNormals;
   std::vector<T> diskRadii;
-  for (uint iL = 0; iL < n_loops; iL++) {
-    uint iStart = loops[iL].x - globalStart;
-    uint N = loops[iL].y;
 
-    //== Test if loop is "circular", i.e. 5-sided, equidistant from
-    // center
-    // point, and planar
-    //     if so, store the center, normal, and radius
-    T3 center, normal;
-    T radius;
-    bool isCircular = true;
-    if (N != 5)
-      isCircular = false;
+  classify_loops(
+      pts, loops, n_loops, globalStart, &polygonLoops, &diskCenters, &diskNormals, &diskRadii);
 
-    if (isCircular) {
-      center = from_float3(pts[iStart + N]);
-
-      // Store displacements from center
-      std::vector<T3> rx;
-      rx.reserve(N);
-      for (uint i = 0; i < N; i++)
-        rx.push_back(diff_f(pts[iStart + i], center));
-
-      // Test if points are equidistant from center, and store radius
-      radius = len(rx[0]);
-      for (uint i = 1; i < N; i++) {
-        T radius_i = len(rx[i]);
-        if (std::abs(radius_i - radius) >= 0.01) {
-          isCircular = false;
-          break;
-        }
-      }
-
-      if (isCircular) {
-        // Test if points are coplanar (and store normal)
-        normal = cross(rx[0], rx[1]);
-        normalize(normal);
-        for (uint i = 1; i < N; i++) {
-          int j = (i + 1) % N;
-          T3 normal_i = cross(rx[i], rx[j]);
-
-          // Check whether or not normal is parallel to normal_i
-          if (std::abs(dot(normal, normal_i) - len(normal) * len(normal_i)) >= 0.01) {
-            isCircular = false;
-            break;
-          }
-        }
-      }
-    }
-
-    if (isCircular) {
-      // if we got here, the loop is circular. Store it as a disk
-      diskCenters.push_back(center);
-      diskNormals.push_back(normal);
-      diskRadii.push_back(radius);
-    }
-    else {
-      // if loop was not determined to be circular, record it as a
-      // polygon
-      polygonLoops.push_back(iL);
-    }
-  }
-
-  // returns solid angle of loop iL and adds gradient to grad
-  auto triangulated_loop_solid_angle = [&](uint iL, const T3 &x, T3 *grad) -> T {
-    uint iStart = loops[iL].x - globalStart;
-    uint N = loops[iL].y;
-
-    // compute the vectors xp from the evaluation point x
-    // to all the polygon vertices, and their lengths Lp
-    std::vector<T3> xp;
-    xp.reserve(N + 1);
-    std::vector<T> Lp;
-    Lp.reserve(N + 1);
-    for (uint i = 0; i < N + 1; i++) {  // center = pts[N]
-      xp.push_back(diff_f(pts[iStart + i], x));
-      Lp.push_back(len(xp[i]));
-    }
-
-    // Iterate over triangles used to triangulate the polygon
-    std::complex<T> running_angle{1., 0.};
-    for (uint i = 0; i < N; i++) {
-      int a = i;
-      int b = (i + 1) % N;
-      int c = N;
-
-      T3 n = cross(xp[a], xp[b]);
-
-      // Add the solid angle of this triangle to the total
-      std::complex<T> tri_angle{Lp[a] * Lp[b] * Lp[c] + dot(xp[a], xp[b]) * Lp[c] +
-                                    dot(xp[b], xp[c]) * Lp[a] + dot(xp[a], xp[c]) * Lp[b],
-                                dot(xp[c], n)};
-      running_angle *= tri_angle;
-
-      //== compute gradient
-      if (grad) {
-        const T3 &g0 = xp[a];
-        const T3 &g1 = xp[b];
-        T n2 = len_squared(n);
-        T scale = ((-dot(g0, g1) + dot(g0, g0)) / len(g0) +
-                   (-dot(g0, g1) + dot(g1, g1)) / len(g1));
-        (*grad)[0] += n[0] / n2 * scale;
-        (*grad)[1] += n[1] / n2 * scale;
-        (*grad)[2] += n[2] / n2 * scale;
-      }
-    }
-
-    return 2 * std::arg(running_angle);
-  };
-
-  // returns solid angle of disk iD and adds gradient to grad
-  auto disk_solid_angle = [&](uint iD, const T3 &x, T3 *grad) -> T {
-    //     Input, double ERRTOL, the error tolerance.
-    //     Relative error due to truncation is less than
-    //       ERRTOL ^ 6 / (4 * (1 - ERRTOL)).
-    //     Sample choices:
-    //       ERRTOL   Relative truncation error less than
-    //       1.D-3    3.D-19
-    //       3.D-3    2.D-16
-    //       1.D-2    3.D-13
-    //       3.D-2    2.D-10
-    //       1.D-1    3.D-7
-    // double elliptic_errtol = 0.75;
-    double elliptic_errtol = 0.01;
-
-    // Formulas from Solid Angle Calculation for a Circular Disk by
-    // Paxton 1959
-    T3 displacement = diff(x, diskCenters[iD]);  // might need to switch to diff_f
-    const T3 &zHat = diskNormals[iD];
-    T L = dot(displacement, diskNormals[iD]);
-    T3 inPlane = fma(displacement, -L, zHat);
-    T r0 = len(inPlane);
-    T sign = copysign(1, L);
-    T aL = std::abs(L);  // use absolute value of length when evaluating solid
-                         // angle to shift branch cut to the horizontal plane
-    T rm = diskRadii[iD];
-    T alphaSq = 4. * r0 * rm / std::pow(r0 + rm, 2);
-    T R1Sq = std::pow(L, 2) + std::pow(r0 - rm, 2);
-    T Rmax = std::sqrt(std::pow(L, 2) + std::pow(r0 + rm, 2));
-    T kSq = 1 - R1Sq / (Rmax * Rmax);
-    T3 rHat = over(inPlane, r0);
-
-    T F = elliptic_fm(kSq, elliptic_errtol);
-
-    // TODO: adjust tolerance
-    // ( When r0 and rm are too close, alphaSq goes to 1, which leads to
-    // a singularity in elliptic_pim )
-    T omega;
-    if (std::abs(r0 - rm) < 1e-3) {
-      omega = sign * (M_PI - 2 * aL / Rmax * F);
-    }
-    else if (r0 < rm) {
-      omega = sign * (2 * M_PI - 2 * aL / Rmax * F +
-                      2 * aL / Rmax * (r0 - rm) / (r0 + rm) *
-                          elliptic_pim(alphaSq, kSq, elliptic_errtol));
-    }
-    else if (r0 > rm) {
-      omega = sign * (-2 * aL / Rmax * F + 2 * aL / Rmax * (r0 - rm) / (r0 + rm) *
-                                               elliptic_pim(alphaSq, kSq, elliptic_errtol));
-    }
-
-    if (grad) {
-      T E = elliptic_em(kSq, elliptic_errtol);
-      T Br = -2 * aL / (r0 * Rmax) * (-F + (rm * rm + r0 * r0 + aL * aL) / R1Sq * E);
-      T Bz = -2 / (Rmax) * (F + (rm * rm - r0 * r0 - aL * aL) / R1Sq * E);
-
-      for (size_t i = 0; i < 3; i++)
-        (*grad)[i] += sign * Br * rHat[i] + Bz * zHat[i];
-    }
-    return omega;
-  };
-
-  auto triangulated_solid_angle = [&](const T3 &x, T3 *grad) -> T {
-    T omega = 0;
-    for (uint iL : polygonLoops)
-      omega += triangulated_loop_solid_angle(iL, x, grad);
+  auto compute_solid_angle = [&](const T3 &x, T3 *grad) -> T {
+    // polygon contribution
+    T omega = triangulated_solid_angle(
+        pts, loops, globalStart, polygonLoops, x, grad, grad_mode, false);
+    // disk contribution
     for (uint iD = 0; iD < diskCenters.size(); iD++)
-      omega += disk_solid_angle(iD, x, grad);
+      omega += disk_solid_angle(x, grad, diskCenters[iD], diskNormals[iD], diskRadii[iD]);
+
     return omega;
   };
 
   T3 grad{0, 0, 0};
-  if (false) {
-    T h = 0.000001;
-    T omega = triangulated_solid_angle(p, nullptr);
-    T omega_x = triangulated_solid_angle(T3{p[0] + h, p[1], p[2]}, nullptr);
-    T omega_y = triangulated_solid_angle(T3{p[0], p[1] + h, p[2]}, nullptr);
-    T omega_z = triangulated_solid_angle(T3{p[0], p[1], p[2] + h}, nullptr);
+  switch (grad_mode) {
+    case 0:  // nicole formula
+      compute_solid_angle(p, &grad);
+      break;
+    case 1:  // finite differences
+    {
+      T h = 0.000001;
+      T omega = compute_solid_angle(p, nullptr);
+      T omega_x = compute_solid_angle(T3{p[0] + h, p[1], p[2]}, nullptr);
+      T omega_y = compute_solid_angle(T3{p[0], p[1] + h, p[2]}, nullptr);
+      T omega_z = compute_solid_angle(T3{p[0], p[1], p[2] + h}, nullptr);
 
-    T fd_df_dx = (omega_x - omega) / h;
-    T fd_df_dy = (omega_y - omega) / h;
-    T fd_df_dz = (omega_z - omega) / h;
+      T fd_df_dx = (omega_x - omega) / h;
+      T fd_df_dy = (omega_y - omega) / h;
+      T fd_df_dz = (omega_z - omega) / h;
 
-    grad = T3{fd_df_dx, fd_df_dy, fd_df_dz};
+      grad = T3{fd_df_dx, fd_df_dy, fd_df_dz};
+      break;
+    }
+    case 2:  // architecture
+    {
+      compute_solid_angle(p, &grad);
+      break;
+    }
   }
-
-  triangulated_solid_angle(p, &grad);
 
   // blend solid angle gradient and offset based on distance to boundary
   /* T s = smoothstep(min_d2, 0, HARNACK_EPS); */
@@ -1239,9 +1404,8 @@ template<typename T>
 ccl_device float3 ray_spherical_harmonic_normal_T(const float3 pf, uint m, int l)
 {
   using T3 = std::array<T, 3>;
-  auto from_float3 = [](const float3 &p) -> T3 { return {(T)p.x, (T)p.y, (T)p.z}; };
 
-  T3 p = from_float3(pf);
+  T3 p = from_float3<T>(pf);
 
   // Return the value of this harmonic polynomial at an evaluation point
   // p,

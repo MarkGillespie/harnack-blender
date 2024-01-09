@@ -65,10 +65,12 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
       params = sa_params.pts[N + 2];
       sa_params.frequency = params.x;
       uint acc_cap = static_cast<uint>(params.y);
+      sa_params.use_quick_triangulation = (acc_cap >> 4) & 1;
       sa_params.use_grad_termination = (acc_cap >> 3) & 1;
       sa_params.use_overstepping = (acc_cap >> 2) & 1;
       sa_params.use_newton = (acc_cap >> 1) & 1;
       sa_params.use_extrapolation = false;
+      sa_params.fixed_step_count = false;
       sa_params.capture_misses = acc_cap & 1;
       sa_params.n_loops = static_cast<uint>(params.z);
 
