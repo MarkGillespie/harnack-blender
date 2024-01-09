@@ -71,10 +71,11 @@ class NonplanarPolygonMesh : public Geometry {
   NODE_SOCKET_API(bool, capture_misses);
   NODE_SOCKET_API(bool, clip_y);
 
-  //==== Acceleerations
+  //==== Accelerations
   NODE_SOCKET_API(bool, use_grad_termination);
   NODE_SOCKET_API(bool, use_overstepping);
   NODE_SOCKET_API(bool, use_newton);
+  NODE_SOCKET_API(bool, use_quick_triangulation);
 
   // from DNA_modifier_types.h
   // MOD_HARNACK_TRIANGULATE = 0,

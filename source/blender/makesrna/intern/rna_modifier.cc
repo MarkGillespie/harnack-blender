@@ -7478,6 +7478,12 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+  prop = RNA_def_property(srna, "use_quick_triangulation", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop, "Use quick triangulation", "Accelerate queries by triangulating with fewer triangles");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   RNA_define_lib_overridable(false);
 }
 

@@ -423,7 +423,8 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
               iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
               frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
               capture_misses_tag = "CAPTURE_MISSES", harnack_tag = "HARNACK",
-              overstepping_tag = "OVERSTEP", newton_tag = "NEWTON";
+              overstepping_tag = "OVERSTEP", newton_tag = "NEWTON",
+              quick_tri_tag = "QUICK_TRIANGULATION";
   for (BL::Attribute &b_attribute : b_mesh.attributes) {
     const ustring name{b_attribute.name().c_str()};
 
@@ -461,6 +462,9 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
     }
     else if (name == newton_tag) {
       mesh->set_use_newton(true);
+    }
+    else if (name == quick_tri_tag) {
+      mesh->set_use_quick_triangulation(true);
     }
     else if (name == formula_tag) {
       BL::FloatAttribute formula_attribute{b_attribute};

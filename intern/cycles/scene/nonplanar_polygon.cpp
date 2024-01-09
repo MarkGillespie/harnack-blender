@@ -46,6 +46,7 @@ NODE_DEFINE(NonplanarPolygonMesh)
   SOCKET_BOOLEAN(use_grad_termination, "Use Gradient Termination Condition", false);
   SOCKET_BOOLEAN(use_overstepping, "Use Overstepping", false);
   SOCKET_BOOLEAN(use_newton, "Use Newton Iterations", false);
+  SOCKET_BOOLEAN(use_quick_triangulation, "Use Quick Triangulation", false);
 
   //==== spherical harmonic options
   SOCKET_FLOAT(R, "R", 0);
@@ -318,10 +319,15 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
           pt_sum += verts[face_starts[j] + i];
           v_id++;
         }
-        tri_verts[v_id] = pt_sum / face_sizes[j];
+        if (use_quick_triangulation) {  // put center at vertex 1
+          tri_verts[v_id] = verts[face_starts[j] + 1];
+        }
+        else {  // put center at center
+          tri_verts[v_id] = pt_sum / face_sizes[j];
+        }
         tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(properties));
-        uint acc_cap = (use_grad_termination << 3) | (use_overstepping << 2) | (use_newton << 1) |
-                       (capture_misses);
+        uint acc_cap = (use_quick_triangulation << 4) | (use_grad_termination << 3) |
+                       (use_overstepping << 2) | (use_newton << 1) | (capture_misses);
         tri_verts[v_id + 2] = make_float3(frequency, acc_cap, static_cast<float>(n_loops));
         v_id += 3;
       }

@@ -43,7 +43,8 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
               iteration_tag = "MAX_ITERATIONS", precision_tag = "PRECISION", clip_tag = "CLIP",
               frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
               capture_misses_tag = "CAPTURE_MISSES", harnack_tag = "HARNACK",
-              overstepping_tag = "OVERSTEP", newton_tag = "NEWTON";
+              overstepping_tag = "OVERSTEP", newton_tag = "NEWTON",
+              quick_tri_tag = "QUICK_TRIANGULATION";
 
   blender::bke::AttributeWriter<float> faw =
       mesh->attributes_for_write().lookup_or_add_for_write<float>(harnack_tag, ATTR_DOMAIN_POINT);
@@ -97,6 +98,11 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
   }
   if (smd->use_newton) {
     faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(newton_tag,
+                                                                      ATTR_DOMAIN_POINT);
+    faw.varray.set(0, 1);
+  }
+  if (smd->use_quick_triangulation) {
+    faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(quick_tri_tag,
                                                                       ATTR_DOMAIN_POINT);
     faw.varray.set(0, 1);
   }
@@ -154,6 +160,12 @@ static void panel_draw(const bContext *C, Panel *panel)
   uiItemR(layout, ptr, "m", UI_ITEM_NONE, IFACE_("m"), ICON_NONE);
   uiItemR(layout, ptr, "use_overstepping", UI_ITEM_NONE, IFACE_("Use Overstepping"), ICON_NONE);
   uiItemR(layout, ptr, "use_newton", UI_ITEM_NONE, IFACE_("Use Newton"), ICON_NONE);
+  uiItemR(layout,
+          ptr,
+          "use_quick_triangulation",
+          UI_ITEM_NONE,
+          IFACE_("Use Quick Triangulation"),
+          ICON_NONE);
 
   modifier_panel_end(layout, ptr);
 }
