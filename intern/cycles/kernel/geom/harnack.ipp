@@ -432,70 +432,37 @@ T prequantum_solid_angle(const packed_float3 *pts,
   return omega;
 }
 
+#ifdef HAS_POLYSCOPE
+#  include "polyscope/curve_network.h"
+#endif
+
 template<typename T>
-// take in a curve on the sphere, represented as a list of unnormalized points
-// `xp`, and their norms `Lp`, and return the rotation index of this curve
-T loop_rotation_index(const std::vector<std::array<T, 3>> &xp,
-                      const std::vector<T> &Lp,
-                      int verbosity = 0)
+// take in a curve on the sphere, stored as a list of unnormalized points `xp`
+T loop_rotation_index(const std::vector<std::array<T, 3>> &xp, int verbosity = 0)
 {
   using T3 = std::array<T, 3>;
-  size_t N = xp.size();
-
-  // HACK: return 0 if any lines intersect, otherwise return 1
-  auto det = [](const T3 &a, const T3 &b, const T3 &c) { return dot(a, cross(b, c)); };
-  auto projectiveIntersection = [&](const T3 &a0, const T3 &a1, const T3 &b0, const T3 &b1) -> T {
-    T c0 = +det(a0, b1, b0);
-    T c1 = -det(a1, b1, b0);
-
-    return c0 / (c0 + c1);
-  };
-
-  for (size_t iL = 0; iL < N; iL++) {
-    const T3 &a0 = xp[iL];
-    const T3 &a1 = xp[(iL + 1) % N];
-    for (size_t jL = 0; jL + 1 < iL; jL++) {
-      if ((iL + 1) % N == jL)
-        continue;
-
-      const T3 &b0 = xp[jL];
-      const T3 &b1 = xp[(jL + 1) % N];
-
-      T ta = projectiveIntersection(a0, a1, b0, b1);
-      T tb = projectiveIntersection(b0, b1, a0, a1);
-
-      if (ta >= 0 && ta <= 1 && tb >= 0 && tb <= 1) {
-        T3 ia = {(1 - ta) * a0[0] + ta * a1[0],
-                 (1 - ta) * a0[1] + ta * a1[1],
-                 (1 - ta) * a0[2] + ta * a1[2]};
-        T3 ib = {(1 - tb) * b0[0] + tb * b1[0],
-                 (1 - tb) * b0[1] + tb * b1[1],
-                 (1 - tb) * b0[2] + tb * b1[2]};
-
-        if (dot(ia, ib) > 0) {
-          if (verbosity >= 1) {
-            std::cout << "found intersection at times " << ta << ", " << tb << " ( " << iL << " - "
-                      << jL << " )" << std::endl;
-            std::cout << "   a: " << a0 << " --- " << a1 << std::endl;
-            std::cout << "   b: " << b0 << " --- " << b1 << std::endl;
-          }
-          return 0;
-        }
-      }
-    }
-  }
-  return 1;
-
   using T2 = std::array<T, 2>;
 
+  size_t nS = 10;      // number of substeps to take along curve
   std::vector<T2> ps;  // stereographic projections to plane
-  ps.reserve(N);
-  for (size_t iP = 0; iP < N; iP++) {
-    const T3 &q = xp[iP];
-    T l = Lp[iP];
-    ps.push_back({q[0] / (l - q[2]), q[1] / (l - q[2])});
+  ps.reserve(nS * xp.size());
+  for (size_t iP = 0; iP < xp.size(); iP++) {
+    const T3 &q0 = xp[iP];
+    const T3 &q1 = xp[(iP + 1) % xp.size()];
 
-    if (verbosity >= 1) {
+    for (size_t iS = 0; iS < nS; iS++) {
+      T t = static_cast<T>(iS) / static_cast<T>(nS);
+
+      // use t to interpolate between q0 and q1
+      T3 q = {
+          (1 - t) * q0[0] + t * q1[0], (1 - t) * q0[1] + t * q1[1], (1 - t) * q0[2] + t * q1[2]};
+
+      // stereographic projection to plane
+      T l = len(q);
+      ps.push_back({q[0] / (l - q[2]), q[1] / (l - q[2])});
+    }
+
+    if (verbosity >= 2) {
       std::cout << "    >> [rotation_index] ps[" << iP << "]: (" << ps.back()[0] << ", "
                 << ps.back()[1] << ")" << std::endl;
     }
@@ -506,6 +473,7 @@ T loop_rotation_index(const std::vector<std::array<T, 3>> &xp,
 
   // sum up total turning angle
   T total_angle = 0;
+  size_t N = ps.size();
   for (uint i = 0; i < N; i++) {
     T2 a = ps[(i + N - 1) % N];
     T2 b = ps[i];
@@ -514,10 +482,10 @@ T loop_rotation_index(const std::vector<std::array<T, 3>> &xp,
     T2 ab = {b[0] - a[0], b[1] - a[1]};
     T2 bc = {c[0] - b[0], c[1] - b[1]};
 
-    T turn_angle = atan2(dot(ab, bc), cross(ab, bc));
+    T turn_angle = atan2(cross(ab, bc), dot(ab, bc));
 
     total_angle += turn_angle;
-    if (verbosity >= 1) {
+    if (verbosity >= 2) {
       T turn_degrees = turn_angle / M_PI * 180.;
       std::cout << "    >> [rotation_index] turn[" << i << "]: " << turn_degrees << " degrees"
                 << std::endl;
@@ -526,6 +494,13 @@ T loop_rotation_index(const std::vector<std::array<T, 3>> &xp,
   if (verbosity >= 1) {
     std::cout << "    >> [rotation_index] total angle: " << total_angle << std::endl;
   }
+
+#ifdef HAS_POLYSCOPE
+  if (verbosity >= 2) {
+    polyscope::registerCurveNetworkLoop2D("ps", ps);
+    polyscope::show();
+  }
+#endif
 
   return total_angle / (2. * M_PI);
 }
@@ -601,7 +576,7 @@ T gauss_bonnet_loop_solid_angle(const packed_float3 *pts,
       }
     }
   }
-  T rho = loop_rotation_index(xp, Lp, verbosity);
+  T rho = loop_rotation_index(xp, verbosity);
   if (verbosity >= 1) {
     std::cout << "      rho " << rho << std::endl;
   }
