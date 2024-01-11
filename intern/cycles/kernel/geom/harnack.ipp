@@ -432,6 +432,104 @@ T prequantum_solid_angle(const packed_float3 *pts,
   return omega;
 }
 
+template<typename T>
+// take in a curve on the sphere, represented as a list of unnormalized points
+// `xp`, and their norms `Lp`, and return the rotation index of this curve
+T loop_rotation_index(const std::vector<std::array<T, 3>> &xp,
+                      const std::vector<T> &Lp,
+                      int verbosity = 0)
+{
+  using T3 = std::array<T, 3>;
+  size_t N = xp.size();
+
+  // HACK: return 0 if any lines intersect, otherwise return 1
+  auto det = [](const T3 &a, const T3 &b, const T3 &c) { return dot(a, cross(b, c)); };
+  auto projectiveIntersection = [&](const T3 &a0, const T3 &a1, const T3 &b0, const T3 &b1) -> T {
+    T c0 = +det(a0, b1, b0);
+    T c1 = -det(a1, b1, b0);
+
+    return c0 / (c0 + c1);
+  };
+
+  for (size_t iL = 0; iL < N; iL++) {
+    const T3 &a0 = xp[iL];
+    const T3 &a1 = xp[(iL + 1) % N];
+    for (size_t jL = 0; jL + 1 < iL; jL++) {
+      if ((iL + 1) % N == jL)
+        continue;
+
+      const T3 &b0 = xp[jL];
+      const T3 &b1 = xp[(jL + 1) % N];
+
+      T ta = projectiveIntersection(a0, a1, b0, b1);
+      T tb = projectiveIntersection(b0, b1, a0, a1);
+
+      if (ta >= 0 && ta <= 1 && tb >= 0 && tb <= 1) {
+        T3 ia = {(1 - ta) * a0[0] + ta * a1[0],
+                 (1 - ta) * a0[1] + ta * a1[1],
+                 (1 - ta) * a0[2] + ta * a1[2]};
+        T3 ib = {(1 - tb) * b0[0] + tb * b1[0],
+                 (1 - tb) * b0[1] + tb * b1[1],
+                 (1 - tb) * b0[2] + tb * b1[2]};
+
+        if (dot(ia, ib) > 0) {
+          if (verbosity >= 1) {
+            std::cout << "found intersection at times " << ta << ", " << tb << " ( " << iL << " - "
+                      << jL << " )" << std::endl;
+            std::cout << "   a: " << a0 << " --- " << a1 << std::endl;
+            std::cout << "   b: " << b0 << " --- " << b1 << std::endl;
+          }
+          return 0;
+        }
+      }
+    }
+  }
+  return 1;
+
+  using T2 = std::array<T, 2>;
+
+  std::vector<T2> ps;  // stereographic projections to plane
+  ps.reserve(N);
+  for (size_t iP = 0; iP < N; iP++) {
+    const T3 &q = xp[iP];
+    T l = Lp[iP];
+    ps.push_back({q[0] / (l - q[2]), q[1] / (l - q[2])});
+
+    if (verbosity >= 1) {
+      std::cout << "    >> [rotation_index] ps[" << iP << "]: (" << ps.back()[0] << ", "
+                << ps.back()[1] << ")" << std::endl;
+    }
+  }
+
+  auto dot = [](const T2 &v, const T2 &w) { return v[0] * w[0] + v[1] * w[1]; };
+  auto cross = [](const T2 &v, const T2 &w) { return v[0] * w[1] - v[1] * w[0]; };
+
+  // sum up total turning angle
+  T total_angle = 0;
+  for (uint i = 0; i < N; i++) {
+    T2 a = ps[(i + N - 1) % N];
+    T2 b = ps[i];
+    T2 c = ps[(i + 1) % N];
+
+    T2 ab = {b[0] - a[0], b[1] - a[1]};
+    T2 bc = {c[0] - b[0], c[1] - b[1]};
+
+    T turn_angle = atan2(dot(ab, bc), cross(ab, bc));
+
+    total_angle += turn_angle;
+    if (verbosity >= 1) {
+      T turn_degrees = turn_angle / M_PI * 180.;
+      std::cout << "    >> [rotation_index] turn[" << i << "]: " << turn_degrees << " degrees"
+                << std::endl;
+    }
+  }
+  if (verbosity >= 1) {
+    std::cout << "    >> [rotation_index] total angle: " << total_angle << std::endl;
+  }
+
+  return total_angle / (2. * M_PI);
+}
+
 // compute solid angle of loop starting at pts[iStart] with length N,
 // evaluated at point x, using the gauss-bonnet formula and adds the gradient to
 // *grad, computed as follows: grad_mode: 0 - nicole formula
@@ -444,7 +542,8 @@ T gauss_bonnet_loop_solid_angle(const packed_float3 *pts,
                                 uint N,
                                 const std::array<T, 3> &x,
                                 std::array<T, 3> *grad,
-                                int grad_mode = 0)
+                                int grad_mode = 0,
+                                int verbosity = 0)
 {
   using T3 = std::array<T, 3>;
 
@@ -459,7 +558,7 @@ T gauss_bonnet_loop_solid_angle(const packed_float3 *pts,
     Lp.push_back(len(xp[i]));
   }
 
-  // Iterate over triangles used to triangulate the polygon
+  // Iterate over polygon corners
   T total_angle = 0.;
   for (uint i = 0; i < N; i++) {
     int a = (i + N - 1) % N;
@@ -468,7 +567,13 @@ T gauss_bonnet_loop_solid_angle(const packed_float3 *pts,
     T3 n_prev = cross(xp[a], xp[b]);
     T3 n_next = cross(xp[b], xp[c]);
 
-    total_angle += atan2(dot(xp[b], cross(n_prev, n_next)) / Lp[b], dot(n_prev, n_next));
+    T corner_angle = atan2(dot(xp[b], cross(n_prev, n_next)), Lp[b] * dot(n_prev, n_next));
+
+    total_angle += corner_angle;
+
+    if (verbosity >= 1) {
+      std::cout << "  corner " << i << " has angle " << corner_angle << std::endl;
+    }
 
     //== compute gradient
     if (grad) {
@@ -496,7 +601,11 @@ T gauss_bonnet_loop_solid_angle(const packed_float3 *pts,
       }
     }
   }
-  return static_cast<T>(2. * M_PI) - total_angle;
+  T rho = loop_rotation_index(xp, Lp, verbosity);
+  if (verbosity >= 1) {
+    std::cout << "      rho " << rho << std::endl;
+  }
+  return static_cast<T>(2. * M_PI) * rho - total_angle;
 }
 
 // compute solid angle via gauss-bonnet for all loops in list polygonLoops
@@ -512,14 +621,15 @@ T gauss_bonnet_solid_angle(const packed_float3 *pts,
                            const std::vector<uint> &polygonLoops,
                            const std::array<T, 3> &x,
                            std::array<T, 3> *grad,
-                           int grad_mode = 0)
+                           int grad_mode = 0,
+                           int verbosity = 0)
 {
   T omega = 0;
   for (uint iL : polygonLoops) {
     uint iStart = loops[iL].x - globalStart;
     uint N = loops[iL].y;
 
-    omega += gauss_bonnet_loop_solid_angle<T>(pts, iStart, N, x, grad, grad_mode);
+    omega += gauss_bonnet_loop_solid_angle<T>(pts, iStart, N, x, grad, grad_mode, verbosity);
   }
 
   return omega;
@@ -544,7 +654,8 @@ T polygon_solid_angle(const packed_float3 *pts,
                       int solid_angle_mode,
                       std::array<T, 3> *grad,
                       int grad_mode = 0,
-                      bool use_quick_triangulation = false)
+                      bool use_quick_triangulation = false,
+                      int verbosity = 0)
 {
   switch (solid_angle_mode) {
     case 0:
@@ -553,7 +664,8 @@ T polygon_solid_angle(const packed_float3 *pts,
     case 1:
       return prequantum_solid_angle(pts, loops, globalStart, polygonLoops, x, grad, grad_mode);
     case 2:
-      return gauss_bonnet_solid_angle(pts, loops, globalStart, polygonLoops, x, grad, grad_mode);
+      return gauss_bonnet_solid_angle(
+          pts, loops, globalStart, polygonLoops, x, grad, grad_mode, verbosity);
     default:
       throw std::runtime_error("Unrecognized solid angle mode: '" +
                                std::to_string(solid_angle_mode) + "'");
@@ -1303,6 +1415,140 @@ ccl_device bool newton_intersect_T(const solid_angle_intersection_params &params
       *isect_v = ((T)iter) / ((T)params.max_iterations);
       report_stats();
       return true;
+    }
+  }
+
+  return false;
+}
+
+template<typename T>
+ccl_device bool bisection_intersect_T(const solid_angle_intersection_params &params,
+                                      ccl_private float *isect_u,
+                                      ccl_private float *isect_v,
+                                      ccl_private float *isect_t,
+                                      ccl_private float *t_start = nullptr,
+                                      acceleration_stats *stats = nullptr,
+                                      int verbosity = 0)
+{
+
+  using T3 = std::array<T, 3>;
+
+  T epsilon = static_cast<T>(params.epsilon);
+  T frequency = static_cast<T>(params.frequency);
+  T levelset = static_cast<T>(params.levelset);
+  T shift = 4. * M_PI;
+
+  T3 ray_P = from_float3<T>(params.ray_P);
+  T3 ray_D = from_float3<T>(params.ray_D);
+  uint globalStart = params.loops[0].x;
+
+  T ray_tmin = static_cast<T>(params.ray_tmin);
+  T ray_tmax = static_cast<T>(params.ray_tmax);
+
+  T lo_bound = 0;
+  T hi_bound = 4. * M_PI;
+
+  std::vector<uint> polygonLoops;
+  std::vector<T3> diskCenters, diskNormals;
+  std::vector<T> diskRadii;
+
+  classify_loops(params.pts,
+                 params.loops,
+                 params.n_loops,
+                 globalStart,
+                 &polygonLoops,
+                 &diskCenters,
+                 &diskNormals,
+                 &diskRadii);
+
+  // sums solid angle of polygon loops and disks and adds gradient to grad
+  auto total_solid_angle = [&](const T3 &x, T3 *grad) -> T {
+    if (grad)
+      *grad = T3{0, 0, 0};  // zero out gradient before computing
+    int grad_mode = 0;
+    T omega = polygon_solid_angle(params.pts,
+                                  params.loops,
+                                  globalStart,
+                                  polygonLoops,
+                                  x,
+                                  params.solid_angle_formula,
+                                  grad,
+                                  grad_mode,
+                                  params.use_quick_triangulation);
+
+    for (uint iD = 0; iD < diskCenters.size(); iD++)
+      omega += disk_solid_angle(x, grad, diskCenters[iD], diskNormals[iD], diskRadii[iD]);
+
+    return omega;
+  };
+
+  // mod and shift solid angle function so that we're looking for a zero of f
+  auto f = [&](T t) -> T {
+    T3 pos = fma(ray_P, t, ray_D);
+    T omega = total_solid_angle(pos, nullptr);
+    return glsl_mod(omega, static_cast<T>(4. * M_PI)) - levelset;
+  };
+
+  T ta = t_start ? *t_start : 0;  // TODO: random starting time?
+  T fa = f(ta);
+  T tb = .125;
+  T fb = f(tb);
+
+  size_t i_double = 0;
+  while (fa * fb > 0 && i_double < 10) {
+    tb *= 2;
+    fb = f(tb);
+    i_double++;
+  }
+
+  if (fa * fb > 0)
+    return false;
+
+  if (verbosity >= 1)
+    std::cout << ">>> initial bounds: [ " << ta << ", " << tb << " ]" << std::endl;
+
+  int iter = 0;
+  auto report_stats = [&]() {
+    if (stats) {
+      stats->total_iterations = iter;
+    }
+  };
+
+  for (; iter < 100; iter++) {
+    T tc = ta + (tb - ta) / 2.;
+    T fc = f(tc);
+
+    if (abs(fc) < params.epsilon || (true && (tb - ta < 1e-8))) {
+      T3 pos = fma(ray_P, tc, ray_D);
+      T omega = total_solid_angle(pos, nullptr);
+      T val = glsl_mod(omega, static_cast<T>(4. * M_PI));
+      *isect_t = tc;
+      *isect_u = val / static_cast<T>(4. * M_PI);
+      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      report_stats();
+      return true;
+    }
+
+    // if (tb - ta < params.epsilon * params.epsilon) break;
+
+    if (fa * fc < 0) {  // intersection in first interfal
+      tb = tc;
+      fb = fc;
+    }
+    else {  // intersection in second interfal
+      ta = tc;
+      fa = fc;
+    }
+
+    if (verbosity >= 1) {
+      auto pr = std::setprecision(4);
+      double fpi = 4. * M_PI;
+      double dt = tb - ta;
+      std::cout << std::setfill(' ') << std::setw(3) << iter << "| ta = " << std::setw(8)
+                << std::fixed << pr << ta << "  tb = " << std::setw(8) << std::fixed << pr << tb
+                << "  δt = " << std::setw(8) << std::fixed << pr << dt << "  fa = " << std::setw(8)
+                << std::fixed << pr << fa << "  fb = " << std::setw(8) << std::fixed << pr << fb
+                << std::endl;
     }
   }
 

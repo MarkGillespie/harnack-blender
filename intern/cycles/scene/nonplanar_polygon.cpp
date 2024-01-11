@@ -324,6 +324,7 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
         }
         else {  // put center at center
           tri_verts[v_id] = pt_sum / face_sizes[j];
+          tri_verts[v_id].z += 2;
         }
         tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(properties));
         uint acc_cap = (use_quick_triangulation << 4) | (use_grad_termination << 3) |
