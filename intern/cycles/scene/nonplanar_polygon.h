@@ -38,12 +38,35 @@ struct PackedPatchTable;
 
 /* Nonplanar polygon mesh */
 
-// duplicated from DNA_modifier_types.h
-enum {
+enum {  // solid angle formula
+  MOD_HARNACK_TRIANGULATE = 0,
+  MOD_HARNACK_PREQUANTUM = 1,
+  MOD_HARNACK_GAUSS_BONNET = 2,
+};
+
+enum {  // gradient formula
+  MOD_HARNACK_NICOLE = 0,
+  MOD_HARNACK_ADIELS10 = 1,
+  MOD_HARNACK_ADIELS8 = 2,
+};
+
+enum {  // precision
+  MOD_HARNACK_FLOAT = 0,
+  MOD_HARNACK_DOUBLE = 1,
+};
+
+enum {  // scenario
   MOD_HARNACK_NONPLANAR_POLYGON = 0,
   MOD_HARNACK_DISK_SHELL = 1,
   MOD_HARNACK_SPHERICAL_HARMONIC = 2,
   MOD_HARNACK_RIEMANN_SURFACE = 3,
+  MOD_HARNACK_GYROID = 4,
+};
+
+enum {  // intersection solver
+  MOD_HARNACK_HARNACK = 0,
+  MOD_HARNACK_NEWTON = 1,
+  MOD_HARNACK_BISECTION = 2,
 };
 
 class NonplanarPolygonMesh : public Geometry {
@@ -65,6 +88,8 @@ class NonplanarPolygonMesh : public Geometry {
   NODE_SOCKET_API(float, boundingbox_expansion);
   NODE_SOCKET_API(int, max_iterations);
   NODE_SOCKET_API(int, precision);
+  NODE_SOCKET_API(int, intersection_mode);
+  NODE_SOCKET_API(int, gradient_mode);
 
   //==== nonplanar polygon options
   NODE_SOCKET_API(bool, polygon_with_holes);
@@ -97,6 +122,7 @@ class NonplanarPolygonMesh : public Geometry {
       case MOD_HARNACK_DISK_SHELL: {  // disk shell
         // TODO
       }
+      case MOD_HARNACK_GYROID:                // gyroid (do same thing as spherical harmonic)
       case MOD_HARNACK_SPHERICAL_HARMONIC: {  // spherical harmonic
         return 1;
       }
@@ -123,46 +149,21 @@ class NonplanarPolygonMesh : public Geometry {
       case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
         // TODO
       }
+      case MOD_HARNACK_GYROID: {  // Riemann surface
+        return 2;
+      }
     }
     return 0;
   }
 
   size_t num_faces() const
   {
-    switch (scenario) {
-      case MOD_HARNACK_NONPLANAR_POLYGON: {  // nonplanar polygon
-        return face_starts.size();
-      }
-      case MOD_HARNACK_DISK_SHELL: {  // disk shell
-        // TODO
-      }
-      case MOD_HARNACK_SPHERICAL_HARMONIC: {  // spherical harmonic
-        return face_starts.size();
-      }
-      case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
-        // TODO
-      }
-    }
-    return 0;
+    return face_starts.size();
   }
 
   size_t num_corners() const
   {
-    switch (scenario) {
-      case MOD_HARNACK_NONPLANAR_POLYGON: {  // nonplanar polygon
-        return verts.size();
-      }
-      case MOD_HARNACK_DISK_SHELL: {  // disk shell
-        // TODO
-      }
-      case MOD_HARNACK_SPHERICAL_HARMONIC: {  // spherical harmonic
-        return verts.size();
-      }
-      case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
-        // TODO
-      }
-    }
-    return 0;
+    return verts.size();
   }
 
  private:

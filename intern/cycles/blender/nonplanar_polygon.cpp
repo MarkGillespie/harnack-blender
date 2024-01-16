@@ -424,7 +424,8 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
               frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
               capture_misses_tag = "CAPTURE_MISSES", harnack_tag = "HARNACK",
               overstepping_tag = "OVERSTEP", newton_tag = "NEWTON",
-              quick_tri_tag = "QUICK_TRIANGULATION";
+              quick_tri_tag = "QUICK_TRIANGULATION", intersection_mode_tag = "INTERSECTION_MODE",
+              gradient_mode_tag = "GRADIENT_MODE";
   for (BL::Attribute &b_attribute : b_mesh.attributes) {
     const ustring name{b_attribute.name().c_str()};
 
@@ -488,6 +489,18 @@ static void create_nonplanar_polygon_mesh(Scene *scene,
       const float *precision_data = static_cast<const float *>(
           precision_attribute.data[0].ptr.data);
       mesh->set_precision(static_cast<int>(precision_data[0]));
+    }
+    else if (name == intersection_mode_tag) {
+      BL::FloatAttribute intersection_mode_attribute{b_attribute};
+      const float *intersection_mode_data = static_cast<const float *>(
+          intersection_mode_attribute.data[0].ptr.data);
+      mesh->set_intersection_mode(static_cast<int>(intersection_mode_data[0]));
+    }
+    else if (name == gradient_mode_tag) {
+      BL::FloatAttribute gradient_mode_attribute{b_attribute};
+      const float *gradient_mode_data = static_cast<const float *>(
+          gradient_mode_attribute.data[0].ptr.data);
+      mesh->set_gradient_mode(static_cast<int>(gradient_mode_data[0]));
     }
     else if (name == clip_tag) {
       mesh->set_clip_y(true);

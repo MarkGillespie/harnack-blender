@@ -44,7 +44,8 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
               frequency_tag = "FREQUENCY", r_tag = "R", l_tag = "L", m_tag = "M",
               capture_misses_tag = "CAPTURE_MISSES", harnack_tag = "HARNACK",
               overstepping_tag = "OVERSTEP", newton_tag = "NEWTON",
-              quick_tri_tag = "QUICK_TRIANGULATION";
+              quick_tri_tag = "QUICK_TRIANGULATION", intersection_mode_tag = "INTERSECTION_MODE",
+              gradient_mode_tag = "GRADIENT_MODE";
 
   blender::bke::AttributeWriter<float> faw =
       mesh->attributes_for_write().lookup_or_add_for_write<float>(harnack_tag, ATTR_DOMAIN_POINT);
@@ -117,6 +118,12 @@ static Mesh *harnack_applyModifier(struct ModifierData *md,
   faw.varray.set(0, static_cast<float>(smd->l));
   faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(m_tag, ATTR_DOMAIN_POINT);
   faw.varray.set(0, static_cast<float>(smd->m));
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(intersection_mode_tag,
+                                                                    ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->intersection_mode));
+  faw = mesh->attributes_for_write().lookup_or_add_for_write<float>(gradient_mode_tag,
+                                                                    ATTR_DOMAIN_POINT);
+  faw.varray.set(0, static_cast<float>(smd->gradient_mode));
 
   return mesh;
 }
@@ -166,6 +173,8 @@ static void panel_draw(const bContext *C, Panel *panel)
           UI_ITEM_NONE,
           IFACE_("Use Quick Triangulation"),
           ICON_NONE);
+  uiItemR(layout, ptr, "intersection_mode", UI_ITEM_NONE, IFACE_("Intersection Mode"), ICON_NONE);
+  uiItemR(layout, ptr, "gradient_mode", UI_ITEM_NONE, IFACE_("Gradient Mode"), ICON_NONE);
 
   modifier_panel_end(layout, ptr);
 }

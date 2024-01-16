@@ -40,7 +40,10 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
   const packed_uint3 *polygon_data = &kernel_data_fetch(tri_vindex, prim);
   uint polygon_start = polygon_data[0].x;
   uint N = polygon_data[0].y;
-  uint scenario = polygon_data[0].z;
+  uint mode = polygon_data[0].z;
+  uint scenario = mode >> 5;
+  uint intersection_mode = (mode >> 2) & 7;
+  uint gradient_mode = mode & 3;
 
   float u, v, t;
   bool found_intersection = false;
@@ -73,12 +76,34 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
       sa_params.fixed_step_count = false;
       sa_params.capture_misses = acc_cap & 1;
       sa_params.n_loops = static_cast<uint>(params.z);
-
-      if (precision == 0) {
-        found_intersection = ray_nonplanar_polygon_intersect_T<float>(sa_params, &u, &v, &t);
-      }
-      else if (precision == 1) {
-        found_intersection = ray_nonplanar_polygon_intersect_T<double>(sa_params, &u, &v, &t);
+      switch (intersection_mode) {
+        case MOD_HARNACK_HARNACK: {
+          if (precision == 0) {
+            found_intersection = ray_nonplanar_polygon_intersect_T<float>(sa_params, &u, &v, &t);
+          }
+          else if (precision == 1) {
+            found_intersection = ray_nonplanar_polygon_intersect_T<double>(sa_params, &u, &v, &t);
+          }
+          break;
+        }
+        case MOD_HARNACK_NEWTON: {
+          if (precision == 0) {
+            found_intersection = newton_intersect_T<float>(sa_params, &u, &v, &t);
+          }
+          else if (precision == 1) {
+            found_intersection = newton_intersect_T<double>(sa_params, &u, &v, &t);
+          }
+          break;
+        }
+        case MOD_HARNACK_BISECTION: {
+          if (precision == 0) {
+            found_intersection = bisection_intersect_T<float>(sa_params, &u, &v, &t);
+          }
+          else if (precision == 1) {
+            found_intersection = bisection_intersect_T<double>(sa_params, &u, &v, &t);
+          }
+          break;
+        }
       }
       break;
     }
@@ -123,6 +148,60 @@ ccl_device_inline bool nonplanar_polygon_intersect(KernelGlobals kg,
       // TODO
       break;
     }
+    case MOD_HARNACK_GYROID: {  // Riemann surface
+      const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
+
+      gyroid_intersection_params g_params;
+      g_params.ray_P = P;
+      g_params.ray_D = dir;
+      g_params.ray_tmin = tmin;
+      g_params.ray_tmax = tmax;
+
+      g_params.epsilon = pts[0].x;
+      g_params.levelset = pts[0].y;
+      uint properties = static_cast<uint>(pts[0].z);
+      g_params.max_iterations = properties >> 6;
+      g_params.use_grad_termination = properties & 1;
+      uint precision = (properties >> 1) & 1;
+
+      g_params.R = pts[1].x;
+      g_params.frequency = pts[1].y;
+
+      uint acc_cap = static_cast<uint>(pts[1].z);
+      g_params.use_grad_termination = (acc_cap >> 3) & 1;
+      g_params.use_overstepping = (acc_cap >> 2) & 1;
+
+      switch (intersection_mode) {
+        case MOD_HARNACK_HARNACK: {
+          if (precision == 0) {
+            found_intersection = ray_gyroid_intersect_T<float>(g_params, &u, &v, &t);
+          }
+          else if (precision == 1) {
+            found_intersection = ray_gyroid_intersect_T<double>(g_params, &u, &v, &t);
+          }
+          break;
+        }
+        case MOD_HARNACK_NEWTON: {
+          if (precision == 0) {
+            found_intersection = newton_intersect_gyroid_T<float>(g_params, &u, &v, &t);
+          }
+          else if (precision == 1) {
+            found_intersection = newton_intersect_gyroid_T<double>(g_params, &u, &v, &t);
+          }
+          break;
+        }
+        case MOD_HARNACK_BISECTION: {
+          if (precision == 0) {
+            found_intersection = bisection_intersect_gyroid_T<float>(g_params, &u, &v, &t);
+          }
+          else if (precision == 1) {
+            found_intersection = bisection_intersect_gyroid_T<double>(g_params, &u, &v, &t);
+          }
+          break;
+        }
+      }
+      break;
+    }
   }
   if (found_intersection) {
 #ifdef __VISIBILITY_FLAG__
@@ -155,7 +234,10 @@ nonplanar_polygon_normal(KernelGlobals kg,
   uint polygon_start = polygon_data[0].x;
   uint N = polygon_data[0].y;
 
-  uint scenario = polygon_data[0].z;
+  uint mode = polygon_data[0].z;
+  uint scenario = mode >> 5;
+  uint intersection_mode = (mode >> 2) & 7;
+  uint gradient_mode = mode & 3;
   const packed_float3 *pts = &kernel_data_fetch(tri_verts, polygon_start);
 
   float3 params = pts[N + 2];
@@ -172,7 +254,8 @@ nonplanar_polygon_normal(KernelGlobals kg,
     switch (scenario) {
       case MOD_HARNACK_NONPLANAR_POLYGON: {
         uint n_loops = static_cast<uint>(pts[N + 2].z);
-        normal = ray_nonplanar_polygon_normal_T<double>(P, polygon_data, pts, n_loops);
+        normal = ray_nonplanar_polygon_normal_T<double>(
+            P, polygon_data, pts, n_loops, gradient_mode);
         break;
       }
       case MOD_HARNACK_DISK_SHELL: {  // disk shell
@@ -194,6 +277,12 @@ nonplanar_polygon_normal(KernelGlobals kg,
       }
       case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
         // TODO
+        break;
+      }
+      case MOD_HARNACK_GYROID: {  // Gyroid
+        float R = pts[1].x;
+        float frequency = pts[1].y;
+        normal = ray_gyroid_normal_T<double>(P, R, frequency);
         break;
       }
     }

@@ -39,6 +39,8 @@ NODE_DEFINE(NonplanarPolygonMesh)
   SOCKET_INT(solid_angle_formula, "Solid Angle Formula", 0);
   SOCKET_INT(max_iterations, "Max Iterations", 1500);
   SOCKET_INT(precision, "Precision", 1);
+  SOCKET_INT(intersection_mode, "Intersection Mode", 0);
+  SOCKET_INT(gradient_mode, "Gradient Mode", 0);
   SOCKET_BOOLEAN(polygon_with_holes, "Polygon with Holes", false);
   SOCKET_BOOLEAN(capture_misses, "Capture Misses", false);
   SOCKET_BOOLEAN(clip_y, "Clip Y", false);
@@ -284,6 +286,7 @@ void NonplanarPolygonMesh::pack_shaders(Scene *scene, uint *tri_shader)
       // TODO
       break;
     }
+    case MOD_HARNACK_GYROID:                // gyroid (do same thing as spherical harmonic)
     case MOD_HARNACK_SPHERICAL_HARMONIC: {  // spherical harmonic
       const int *shader_ptr = shader.data();
       int shader_id = shader_ptr ? shader_ptr[0] : INT_MAX;
@@ -303,6 +306,7 @@ void NonplanarPolygonMesh::pack_shaders(Scene *scene, uint *tri_shader)
 
 void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tri_vindex)
 {
+  uint mode = (scenario << 5) | (intersection_mode << 2) | gradient_mode;
   switch (scenario) {
     case MOD_HARNACK_NONPLANAR_POLYGON: {  // nonplanar polygon
       size_t triangles_size = face_starts.size();
@@ -312,7 +316,7 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
       uint v_id = 0;
 
       for (uint j = 0; j < triangles_size; j++) {
-        tri_vindex[j] = make_packed_uint3(vert_offset + v_id, face_sizes[j], scenario);
+        tri_vindex[j] = make_packed_uint3(vert_offset + v_id, face_sizes[j], mode);
         float3 pt_sum = make_float3(0, 0, 0);
         for (size_t i = 0; i < face_sizes[j]; i++) {
           tri_verts[v_id] = verts[face_starts[j] + i];
@@ -324,7 +328,7 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
         }
         else {  // put center at center
           tri_verts[v_id] = pt_sum / face_sizes[j];
-          tri_verts[v_id].z += 2;
+          // tri_verts[v_id].z += 2;
         }
         tri_verts[v_id + 1] = make_float3(epsilon, levelset, static_cast<float>(properties));
         uint acc_cap = (use_quick_triangulation << 4) | (use_grad_termination << 3) |
@@ -343,7 +347,7 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
       uint properties = (max_iterations << 6) | (static_cast<uint>(precision) << 1) |
                         use_grad_termination;
 
-      tri_vindex[0] = make_packed_uint3(vert_offset, 1, scenario);
+      tri_vindex[0] = make_packed_uint3(vert_offset, 1, mode);
       tri_verts[0] = make_float3(R, static_cast<float>(l), static_cast<float>(m));
       tri_verts[1] = make_float3(epsilon, levelset, static_cast<float>(properties));
       tri_verts[2] = make_float3(frequency, 0, 0);
@@ -352,6 +356,15 @@ void NonplanarPolygonMesh::pack_verts(packed_float3 *tri_verts, packed_uint3 *tr
     case MOD_HARNACK_RIEMANN_SURFACE: {  // Riemann surface
       // TODO
       break;
+    }
+    case MOD_HARNACK_GYROID: {  // gyroid
+      uint properties = (max_iterations << 6) | (static_cast<uint>(precision) << 1) |
+                        use_grad_termination;
+
+      tri_vindex[0] = make_packed_uint3(vert_offset, 1, mode);
+      tri_verts[0] = make_float3(epsilon, levelset, static_cast<float>(properties));
+      uint acc_cap = (use_grad_termination << 3) | (use_overstepping << 2);
+      tri_verts[1] = make_float3(R, frequency, static_cast<float>(acc_cap));
     }
   }
 }

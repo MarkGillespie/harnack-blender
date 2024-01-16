@@ -24,9 +24,22 @@ void normalize(f3 &vec)
   for (uint i = 0; i < 3; i++)
     vec[i] /= s;
 }
+f3 normalized(const f3 &vec)
+{
+  float s = len(vec);
+  return {vec[0] / s, vec[1] / s, vec[2] / s};
+}
 f3 diff(const f3 &a, const f3 &b)
 {
   return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+}
+f3 operator-(const f3 &a, const f3 &b)
+{
+  return diff(a, b);
+}
+f3 operator+(const f3 &a, const f3 &b)
+{
+  return {a[0] + b[0], a[1] + b[1], a[2] + b[2]};
 }
 f3 diff_f(const float3 &a, const f3 &b)
 {
@@ -151,13 +164,26 @@ double len(const d3 &a)
 }
 void normalize(d3 &vec)
 {
-  float s = len(vec);
+  double s = len(vec);
   for (uint i = 0; i < 3; i++)
     vec[i] /= s;
+}
+d3 normalized(const d3 &vec)
+{
+  double s = len(vec);
+  return {vec[0] / s, vec[1] / s, vec[2] / s};
 }
 d3 diff(const d3 &a, const d3 &b)
 {
   return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+}
+d3 operator-(const d3 &a, const d3 &b)
+{
+  return diff(a, b);
+}
+d3 operator+(const d3 &a, const d3 &b)
+{
+  return {a[0] + b[0], a[1] + b[1], a[2] + b[2]};
 }
 d3 diff_f(const float3 &a, const d3 &b)
 {
@@ -268,6 +294,11 @@ double fiberArg(const d4 &q1, const d4 &q2)
 template<typename T> std::array<T, 3> from_float3(const float3 &p)
 {
   return {(T)p.x, (T)p.y, (T)p.z};
+}
+
+template<typename T> float3 to_float3(const std::array<T, 3> &p)
+{
+  return make_float3(p[0], p[1], p[2]);
 }
 
 template<typename T> std::ostream &operator<<(std::ostream &o, const std::array<T, 3> &v)

@@ -168,9 +168,8 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals kg,
                                                 prim,
                                                 prim_addr))
                 {
-                  /* shadow ray early termination */
+                  /* shadow ray early termination TKTKTKTKTKT TODO: what is this? */
                   if (visibility & PATH_RAY_SHADOW_OPAQUE) {
-                    printf("shadow ray early termination\n");
                     return true;
                   }
                 }

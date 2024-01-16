@@ -2424,22 +2424,35 @@ typedef enum VolumeToMeshFlag {
   VOLUME_TO_MESH_USE_SMOOTH_SHADE = 1 << 0,
 } VolumeToMeshFlag;
 
-enum {
+enum {  // solid angle formula
   MOD_HARNACK_TRIANGULATE = 0,
   MOD_HARNACK_PREQUANTUM = 1,
   MOD_HARNACK_GAUSS_BONNET = 2,
 };
 
-enum {
+enum {  // gradient formula
+  MOD_HARNACK_NICOLE = 0,
+  MOD_HARNACK_ADIELS10 = 1,
+  MOD_HARNACK_ADIELS8 = 2,
+};
+
+enum {  // precision
   MOD_HARNACK_FLOAT = 0,
   MOD_HARNACK_DOUBLE = 1,
 };
 
-enum {
+enum {  // scenario
   MOD_HARNACK_NONPLANAR_POLYGON = 0,
   MOD_HARNACK_DISK_SHELL = 1,
   MOD_HARNACK_SPHERICAL_HARMONIC = 2,
   MOD_HARNACK_RIEMANN_SURFACE = 3,
+  MOD_HARNACK_GYROID = 4,
+};
+
+enum {  // intersection solver
+  MOD_HARNACK_HARNACK = 0,
+  MOD_HARNACK_NEWTON = 1,
+  MOD_HARNACK_BISECTION = 2,
 };
 
 typedef struct HarnackModifierData {
@@ -2455,6 +2468,8 @@ typedef struct HarnackModifierData {
   float r;                       // 4 bytes
   int l;                         // 4 bytes
   int m;                         // 4 bytes
+  int intersection_mode;         // 4 bytes
+  int gradient_mode;             // 4 bytes
   char use_grad_termination;     // 1 byte
   char polygon_with_holes;       // 1 byte
   char clip_y;                   // 1 byte

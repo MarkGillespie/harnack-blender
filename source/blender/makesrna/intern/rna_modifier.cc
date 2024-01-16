@@ -689,6 +689,25 @@ const EnumPropertyItem rna_enum_modifier_harnack_solid_angle_formula_items[] = {
     {0, nullptr, 0, nullptr, nullptr},
 };
 
+const EnumPropertyItem rna_enum_modifier_harnack_gradient_formula_items[] = {
+    {MOD_HARNACK_NICOLE,
+     "NICOLE",
+     0,
+     "Nicole",
+     "Evaluate the solid angle gradient via Nicole's Biot-Savart integral"},
+    {MOD_HARNACK_ADIELS10,
+     "ADIELS10",
+     0,
+     "Adiels (10)",
+     "Evaluate the solid angle gradient by the stable expression of Adiels et al. (Eq 10)"},
+    {MOD_HARNACK_ADIELS8,
+     "ADIELS8",
+     0,
+     "Adiels (8)",
+     "Evaluate the solid angle gradient by the expression of Adiels et al. (Eq 8)"},
+    {0, nullptr, 0, nullptr, nullptr},
+};
+
 const EnumPropertyItem rna_enum_modifier_harnack_precision_items[] = {
     {MOD_HARNACK_FLOAT, "FLOAT", 0, "Float", "Evaluate solid angle in single precision"},
     {MOD_HARNACK_DOUBLE, "DOUBLE", 0, "Double", "Evaluate solid angle in double precision"},
@@ -716,6 +735,14 @@ const EnumPropertyItem rna_enum_modifier_harnack_scenario_items[] = {
      0,
      "Riemann Surface",
      "Render a Riemann surface"},
+    {MOD_HARNACK_GYROID, "GYROID", 0, "Gyroid", "Render a gyroid (in a ball)"},
+    {0, nullptr, 0, nullptr, nullptr},
+};
+
+const EnumPropertyItem rna_enum_modifier_harnack_intersection_items[] = {
+    {MOD_HARNACK_HARNACK, "HARNACK", 0, "Harnack", "Intersect via Harnack tracing"},
+    {MOD_HARNACK_NEWTON, "NEWTON", 0, "Newton", "Intersect via Newton's method"},
+    {MOD_HARNACK_BISECTION, "BISECTION", 0, "Bisection", "Intersect via bisection search"},
     {0, nullptr, 0, nullptr, nullptr},
 };
 
@@ -7482,6 +7509,18 @@ static void rna_def_modifier_harnack(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Use quick triangulation", "Accelerate queries by triangulating with fewer triangles");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "intersection_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, nullptr, "intersection_mode");
+  RNA_def_property_enum_items(prop, rna_enum_modifier_harnack_intersection_items);
+  RNA_def_property_ui_text(prop, "Intersection Mode", "Which intersection strategy to use ");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "gradient_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, nullptr, "gradient_mode");
+  RNA_def_property_enum_items(prop, rna_enum_modifier_harnack_gradient_formula_items);
+  RNA_def_property_ui_text(prop, "Gradient Mode", "Which gradient formula to use ");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   RNA_define_lib_overridable(false);

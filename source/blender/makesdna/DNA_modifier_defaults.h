@@ -303,24 +303,26 @@
 
 #define _DNA_DEFAULT_HarnackModifierData \
   { \
-    .scenario = 0,                  \
-    .epsilon = 0.001,               \
-    .levelset = 0.5,                \
-    .frequency = -1,                \
-    .boundingbox_expansion = 0.,    \
-    .solid_angle_formula = 0,       \
-    .precision = 1,                 \
-    .max_iterations = 1500,         \
-    .use_grad_termination = false,  \
-    .polygon_with_holes = false,    \
-    .clip_y = false,                \
-    .r = 1.,                        \
-    .l = 4,                         \
-    .m = 2,                         \
-    .capture_misses = false,        \
-    .use_overstepping = false,      \
-    .use_newton = false,            \
-    .use_quick_triangulation = false \
+    .scenario = 0,                    \
+    .epsilon = 0.001,                 \
+    .levelset = 0.5,                  \
+    .frequency = -1,                  \
+    .boundingbox_expansion = 0.,      \
+    .solid_angle_formula = 0,         \
+    .precision = 1,                   \
+    .max_iterations = 1500,           \
+    .use_grad_termination = false,    \
+    .polygon_with_holes = false,      \
+    .clip_y = false,                  \
+    .r = 1.,                          \
+    .l = 4,                           \
+    .m = 2,                           \
+    .capture_misses = false,          \
+    .use_overstepping = false,        \
+    .use_newton = false,              \
+    .use_quick_triangulation = false, \
+    .intersection_mode = 0,           \
+    .gradient_mode = 0                \
   }
 
 #define _DNA_DEFAULT_HookModifierData \
