@@ -1,3 +1,28 @@
+# Harnack Tracing in Blender
+This repository contains our Blender implementation of the algorithm described in _Ray Tracing Harmonic Functions_ for ray tracing harmonic functions.
+
+## Building
+Here are the commands that I use to build this code on a Mac. First, Blender requires svn (which can be installed using e.g. `brew install svn`).
+
+Then, you can run the following commands to build and launch Blender
+```bash
+mkdir blender
+cd blender
+git clone git@github.com:MarkGillespie/harnack-blender.git blender-git
+cd blender-git
+make update
+make -j11
+../build_darwin/bin/Blender.app/Contents/MacOS/Blender
+```
+
+## Code
+Most of our new code can be found in `intern/cycles/kernel/geom/nonplanar_polygon_intersect.h` and `intern/cycles/kernel/geom/harnack.ipp`
+
+## Acknowledgements
+Elliptic integrals are evaluated using code by John Burkardt, available [here](https://people.math.sc.edu/Burkardt/f77_src/elliptic_integral/elliptic_integral.html).
+ 
+
+## Original Blender README
 <!--
 Keep this document short & concise,
 linking to external resources instead of including content in-line.
