@@ -81,11 +81,12 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
   // finite difference gradient from
   // https://iquilezles.org/articles/normalsSDF
   auto calculateGradient = [&](const T3 &p) -> T3 {
-    const T eps = 0.005;
-    T q0 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{1, -1, -1}));
-    T q1 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, -1, 1}));
-    T q2 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, 1, -1}));
-    T q3 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{1, 1, 1}));
+    const T eps = static_cast<T>(0.005);
+    const T s = static_cast<T>(0.5773);
+    T q0 = evaluatePolynomial(fma(p, s * eps, T3{1, -1, -1}));
+    T q1 = evaluatePolynomial(fma(p, s * eps, T3{-1, -1, 1}));
+    T q2 = evaluatePolynomial(fma(p, s * eps, T3{-1, 1, -1}));
+    T q3 = evaluatePolynomial(fma(p, s * eps, T3{1, 1, 1}));
     return T3{static_cast<T>(.5773) * (q3 + q0 - q1 - q2),
               static_cast<T>(.5773) * (q3 - q0 - q1 + q2),
               static_cast<T>(.5773) * (q3 - q0 + q1 - q2)};
@@ -1234,10 +1235,10 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
 
       if (!params.fixed_step_count && params.use_extrapolation) {
         // model val(t) = a t + b
-        float a = (val - val_prev) / (t + t_overstep - t_prev);
-        float b = val - a * t;
-        float t_low = (lo_bound - b) / a;
-        float t_high = (hi_bound - b) / a;
+        float a = static_cast<float>((val - val_prev) / (t + t_overstep - t_prev));
+        float b = static_cast<float>(val - a * t);
+        float t_low = static_cast<float>((lo_bound - b) / a);
+        float t_high = static_cast<float>((hi_bound - b) / a);
         float t_test = -1.;
         if (t_low > 0. && t_high > 0.) {
           t_test = fmin(t_low, t_high);
@@ -1259,7 +1260,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
           stats->bs.push_back(b);
           stats->extrapolation_times.push_back(t_test);
           stats->extrapolation_values.push_back(a * t_test + b);
-          stats->true_values.push_back(e_val);
+          stats->true_values.push_back(static_cast<float>(e_val));
         }
         if (0. <= t_test && t_test <= 4. * (t + t_overstep - t_prev)) {
           if (close_to_zero(
@@ -1391,7 +1392,7 @@ ccl_device bool newton_intersect_T(const solid_angle_intersection_params &params
     T df = dot(ray_D, grad_f);
     T f_err = (val < static_cast<T>(2. * M_PI) ? val : val - static_cast<T>(4. * M_PI));
     T dt = -f_err / df;
-    dt = fmin(fmax(dt, -2.), 2.);  // clamp to [-2, 2]
+    dt = static_cast<T>(fmin(fmax(dt, -2.), 2.));  // clamp to [-2, 2]
 
     if (verbosity >= 1) {
       auto pr = std::setprecision(4);
@@ -1520,7 +1521,7 @@ ccl_device bool bisection_intersect_T(const solid_angle_intersection_params &par
   };
 
   for (; iter < 100; iter++) {
-    T tc = ta + (tb - ta) / 2.;
+    T tc = static_cast<T>(ta + (tb - ta) / 2.);
     T fc = f(tc);
 
     if (std::abs(fc) < params.epsilon || (false && (tb - ta < 1e-8))) {
@@ -1680,7 +1681,9 @@ ccl_device float3 ray_spherical_harmonic_normal_T(const float3 pf, uint m, int l
   T3 grad = calculateGradient(p);
   normalize(grad);
 
-  return make_float3(grad[0], grad[1], grad[2]);
+  return make_float3(static_cast<float>(grad[0]),
+                     static_cast<float>(grad[1]),
+                     static_cast<float>(grad[2]));
 }
 
 typedef struct gyroid_intersection_params {
@@ -1857,7 +1860,7 @@ ccl_device bool newton_intersect_gyroid_T(const gyroid_intersection_params &para
   // TODO: clip to sphere
   using T3 = std::array<T, 3>;
   T epsilon = static_cast<T>(params.epsilon);
-  T scale = 1. / static_cast<T>(params.frequency);
+  T scale = static_cast<T>(1. / params.frequency);
   T levelset = static_cast<T>(params.levelset);
 
   T3 ray_P = from_float3<T>(params.ray_P);
