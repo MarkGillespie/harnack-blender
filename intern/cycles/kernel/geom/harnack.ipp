@@ -65,7 +65,7 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
   T radius = static_cast<T>(params.R);
   T outerRadius = static_cast<T>(1.25) * radius;  // TODO: make configurable?
 
-  T unitBound = sphericalHarmonicBound(params.l, params.m);
+  T unitBound = static_cast<T>(sphericalHarmonicBound(params.l, params.m));
   // since the spherical harmonic is homogeneous of degree l, we can bound it
   // using a bound on the unit sphere and our sphere radius
   T shift = unitBound * static_cast<T>(std::pow(outerRadius, params.l));
@@ -81,7 +81,7 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
   // finite difference gradient from
   // https://iquilezles.org/articles/normalsSDF
   auto calculateGradient = [&](const T3 &p) -> T3 {
-    const double eps = 0.005;
+    const T eps = 0.005;
     T q0 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{1, -1, -1}));
     T q1 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, -1, 1}));
     T q2 = evaluatePolynomial(fma(p, 0.5773 * eps, T3{-1, 1, -1}));
@@ -202,9 +202,9 @@ ccl_device bool ray_spherical_harmonic_intersect_T(
          = Vector3d(pos); return constructIntersection(t, pos, grad, rd,
          f);
       */
-      *isect_t = t;
-      *isect_u = f;
-      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      *isect_t = static_cast<float>(t);
+      *isect_u = static_cast<float>(f);
+      *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
       return true;
     }
 
@@ -508,7 +508,7 @@ T loop_rotation_index(const std::vector<std::array<T, 3>> &xp, int verbosity = 0
 
     total_angle += turn_angle;
     if (verbosity >= 2) {
-      T turn_degrees = turn_angle / M_PI * 180.;
+      T turn_degrees = static_cast<T>(turn_angle / M_PI * 180.);
       std::cout << "    >> [rotation_index] turn[" << i << "]: " << turn_degrees << " degrees"
                 << std::endl;
     }
@@ -524,7 +524,7 @@ T loop_rotation_index(const std::vector<std::array<T, 3>> &xp, int verbosity = 0
   }
 #endif
 
-  return total_angle / (2. * M_PI);
+  return static_cast<T>(total_angle / (2. * M_PI));
 }
 
 // compute solid angle of loop starting at pts[iStart] with length N,
@@ -708,37 +708,37 @@ T disk_solid_angle(const std::array<T, 3> &x,
   T L = dot(displacement, zHat);
   T3 inPlane = fma(displacement, -L, zHat);
   T r0 = len(inPlane);
-  T sign = copysign(1, L);
+  T sign = static_cast<T>(copysign(1, L));
   T aL = std::abs(L);  // use absolute value of length when evaluating solid
                        // angle to shift branch cut to the horizontal plane
   T rm = disk_radius;
-  T alphaSq = 4. * r0 * rm / std::pow(r0 + rm, 2);
-  T R1Sq = std::pow(L, 2) + std::pow(r0 - rm, 2);
-  T Rmax = std::sqrt(std::pow(L, 2) + std::pow(r0 + rm, 2));
+  T alphaSq = static_cast<T>(4. * r0 * rm / std::pow(r0 + rm, 2));
+  T R1Sq = static_cast<T>(std::pow(L, 2) + std::pow(r0 - rm, 2));
+  T Rmax = static_cast<T>(std::sqrt(std::pow(L, 2) + std::pow(r0 + rm, 2)));
   T kSq = 1 - R1Sq / (Rmax * Rmax);
   T3 rHat = over(inPlane, r0);
 
-  T F = elliptic_fm(kSq, elliptic_errtol);
+  T F = static_cast<T>(elliptic_fm(kSq, elliptic_errtol));
 
   // TODO: adjust tolerance
   // ( When r0 and rm are too close, alphaSq goes to 1, which leads to a
   // singularity in elliptic_pim )
   T omega;
   if (std::abs(r0 - rm) < 1e-3) {
-    omega = sign * (M_PI - 2 * aL / Rmax * F);
+    omega = static_cast<T>(sign * (M_PI - 2 * aL / Rmax * F));
   }
   else if (r0 < rm) {
-    omega = sign *
+    omega = static_cast<T>(sign *
             (2 * M_PI - 2 * aL / Rmax * F +
-             2 * aL / Rmax * (r0 - rm) / (r0 + rm) * elliptic_pim(alphaSq, kSq, elliptic_errtol));
+             2 * aL / Rmax * (r0 - rm) / (r0 + rm) * elliptic_pim(alphaSq, kSq, elliptic_errtol)));
   }
   else if (r0 > rm) {
-    omega = sign * (-2 * aL / Rmax * F + 2 * aL / Rmax * (r0 - rm) / (r0 + rm) *
-                                             elliptic_pim(alphaSq, kSq, elliptic_errtol));
+    omega = static_cast<T>(sign * (-2 * aL / Rmax * F + 2 * aL / Rmax * (r0 - rm) / (r0 + rm) *
+                                             elliptic_pim(alphaSq, kSq, elliptic_errtol)));
   }
 
   if (grad) {
-    T E = elliptic_em(kSq, elliptic_errtol);
+    T E = static_cast<T>(elliptic_em(kSq, elliptic_errtol));
     T Br = -2 * aL / (r0 * Rmax) * (-F + (rm * rm + r0 * r0 + aL * aL) / R1Sq * E);
     T Bz = -2 / (Rmax) * (F + (rm * rm - r0 * r0 - aL * aL) / R1Sq * E);
 
@@ -1647,7 +1647,9 @@ ccl_device float3 ray_nonplanar_polygon_normal_T(const float3 pf,
   grad[1] /= grad_norm;
   grad[2] /= grad_norm;
 
-  return make_float3(grad[0], grad[1], grad[2]);
+  return make_float3(static_cast<float>(grad[0]),
+                     static_cast<float>(grad[1]),
+                     static_cast<float>(grad[2]));
 }
 
 template<typename T>
@@ -1726,7 +1728,7 @@ ccl_device bool ray_gyroid_intersect_T(const gyroid_intersection_params &params,
 {
   using T3 = std::array<T, 3>;
   T epsilon = static_cast<T>(params.epsilon);
-  T scale = 1. / static_cast<T>(params.frequency);
+  T scale = static_cast<T>(1. / params.frequency);
   T levelset = static_cast<T>(params.levelset);
 
   T3 ray_P = from_float3<T>(params.ray_P);
@@ -1745,8 +1747,8 @@ ccl_device bool ray_gyroid_intersect_T(const gyroid_intersection_params &params,
   // find safe step size derived from 4D Harnack inequality
   auto getMaxStep4D = [](T fx, T R, T levelset, T shift) -> T {
     T a = (fx + shift) / (levelset + shift);
-    T u = std::pow(3. * sqrt(3. * std::pow(a, 3.) + 81. * std::pow(a, 2.)) + 27. * a, 1. / 3.);
-    return R * std::abs(u / 3. - a / u - 1.);
+    T u = static_cast<T>(std::pow(3. * sqrt(3. * std::pow(a, 3.) + 81. * std::pow(a, 2.)) + 27. * a, 1. / 3.));
+    return static_cast<T>(R * std::abs(u / 3. - a / u - 1.));
   };
 
   auto distanceToLevelset = [&](T f, T levelset, const T3 &grad) -> T {
@@ -1792,7 +1794,7 @@ ccl_device bool ray_gyroid_intersect_T(const gyroid_intersection_params &params,
       grad = evaluateGyroidGradient(pos, scale);
 
     T R = distance_to_boundary(pos);
-    T shift = std::exp(sqrt(2.) * R) * unit_shift;  // scale shift for 4D sphere
+    T shift = static_cast<T>(std::exp(sqrt(2.) * R) * unit_shift);  // scale shift for 4D sphere
 
     T r = getMaxStep4D(f, R, levelset, shift) / ld;  // safe step size
 
@@ -1828,7 +1830,7 @@ ccl_device float3 ray_gyroid_normal_T(const float3 pf, float R, float frequency)
 
   T3 p = from_float3<T>(pf);
   T radius = static_cast<T>(R);
-  T scale = 1. / static_cast<T>(frequency);
+  T scale = static_cast<T>(1. / frequency);
 
   // special case for points on boundary
   if (std::abs(len_squared(p) - radius * radius) < (float)1e-5) {
@@ -1903,7 +1905,7 @@ ccl_device bool newton_intersect_gyroid_T(const gyroid_intersection_params &para
     T df = dot(ray_D, grad_f);
     T f_err = val - levelset;
     T dt = -f_err / df;
-    dt = fmin(fmax(dt, -2.), 2.);  // clamp to [-2, 2]
+    dt = static_cast<T>(fmin(fmax(dt, -2.), 2.));  // clamp to [-2, 2]
 
     if (verbosity >= 1) {
       auto pr = std::setprecision(4);
@@ -1922,9 +1924,9 @@ ccl_device bool newton_intersect_gyroid_T(const gyroid_intersection_params &para
     if (distanceToLevelset(val, levelset, grad_f) < epsilon) {
       if (t < tInit || t > tMax)
         return false;  // root is out of bounds
-      *isect_t = t;
-      *isect_u = val;
-      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      *isect_t = static_cast<float>(t);
+      *isect_u = static_cast<float>(val);
+      *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
       return true;
     }
   }
@@ -1944,7 +1946,7 @@ ccl_device bool bisection_intersect_gyroid_T(const gyroid_intersection_params &p
   // TODO: clip to sphere
   using T3 = std::array<T, 3>;
   T epsilon = static_cast<T>(params.epsilon);
-  T scale = 1. / static_cast<T>(params.frequency);
+  T scale = static_cast<T>(1. / params.frequency);
   T levelset = static_cast<T>(params.levelset);
 
   T3 ray_P = from_float3<T>(params.ray_P);
@@ -2001,7 +2003,7 @@ ccl_device bool bisection_intersect_gyroid_T(const gyroid_intersection_params &p
   int iter = 0;
 
   for (; iter < 100; iter++) {
-    T tc = ta + (tb - ta) / 2.;
+    T tc = static_cast<T>(ta + (tb - ta) / 2.);
     T fc = f(tc);
 
     T3 grad_f;
@@ -2013,9 +2015,9 @@ ccl_device bool bisection_intersect_gyroid_T(const gyroid_intersection_params &p
     if (distanceToLevelset(fc, 0, grad_f) < params.epsilon) {
       T3 pos = fma(ray_P, tc, ray_D);
       T val = evaluateGyroid(pos, scale);
-      *isect_t = tc;
-      *isect_u = val;
-      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      *isect_t = static_cast<float>(tc);
+      *isect_u = static_cast<float>(val);
+      *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
       return true;
     }
 
