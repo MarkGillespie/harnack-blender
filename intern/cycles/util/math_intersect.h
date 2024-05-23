@@ -321,8 +321,8 @@ ccl_device bool ray_nonplanar_polygon_intersect(const float3 ray_P,
                                                 ccl_private float *isect_t)
 {
   int max_iterations = 1500;
-  float epsilon = 0.0001;
-  float shift = 4. * M_PI;
+  float epsilon = 0.0001f;
+  float shift = static_cast<float>(4. * M_PI);
 
   if (N < 3)
     return false;
@@ -362,7 +362,7 @@ ccl_device bool ray_nonplanar_polygon_intersect(const float3 ray_P,
       float3 m = p2 - p1;
       float3 v = x - p1;
       // dot = |a|*|b|cos(theta) * n, isolating |a|sin(theta)
-      float t = fmin(fmax(dot(m, v) / dot(m, m), 0.), 1.);
+      float t = fmin(fmax(dot(m, v) / dot(m, m), 0.f), 1.f);
       float d2 = len_squared(v - t * m);
       // if closestPoint is not null, update it to track closest point
       if (closest_point && d2 < min_d2)

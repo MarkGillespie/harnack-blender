@@ -298,7 +298,7 @@ template<typename T> std::array<T, 3> from_float3(const float3 &p)
 
 template<typename T> float3 to_float3(const std::array<T, 3> &p)
 {
-  return make_float3(p[0], p[1], p[2]);
+  return make_float3((float)p[0], (float)p[1], (float)p[2]);
 }
 
 template<typename T> std::ostream &operator<<(std::ostream &o, const std::array<T, 3> &v)

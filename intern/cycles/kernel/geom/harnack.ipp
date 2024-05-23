@@ -883,7 +883,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
   T epsilon = static_cast<T>(params.epsilon);
   T frequency = static_cast<T>(params.frequency);
   T levelset = static_cast<T>(params.levelset);
-  T shift = 4. * M_PI;
+  T shift = static_cast<T>(4. * M_PI);
 
   T3 ray_P = from_float3<T>(params.ray_P);
   T3 ray_D = from_float3<T>(params.ray_D);
@@ -931,7 +931,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
           T3 m = diff(p2, p1);
           T3 v = diff(x, p1);
           // dot = |a|*|b|cos(theta) * n, isolating |a|sin(theta)
-          T t = fmin(fmax(dot(m, v) / dot(m, m), 0.), 1.);
+          T t = fmin(fmax(dot(m, v) / dot(m, m), (T)0.), (T)1.);
           T d2 = len_squared(fma(v, -t, m));
           // if closestPoint is not null, update it to track closest point
           if (closest_point && d2 < *min_d2)
@@ -1014,7 +1014,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
   T t = ray_tmin;
   int iter = 0;
   T lo_bound = 0;
-  T hi_bound = 4. * M_PI;
+  T hi_bound = static_cast<T>(4. * M_PI);
 
   T ld = len(ray_D);
 
@@ -1072,7 +1072,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
 
     if (frequency > 0) {
       lo_bound = 0;
-      hi_bound = 4. * M_PI;
+      hi_bound = static_cast<T>(4. * M_PI);
       // add four additional level sets
       if (val < frequency * hi_bound) {
         hi_bound = frequency * hi_bound;
@@ -1150,17 +1150,17 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
             T3 rd_planar = fma(ray_D, -dot(ray_D, tangent), tangent);
 
             for (int i = 0; i < 5; i++) {
-              T val_err = (val < 2. * M_PI ? -val : 4. * M_PI - val);
+              T val_err = (val < static_cast<T>(2. * M_PI) ? -val : static_cast<T>(4. * M_PI) - val);
               T alpha = -atan2(dot(tangent, cross(rd_planar, grad)), dot(rd_planar, grad));
               T dt = R * sin(val_err) / cos(val_err - alpha);
               // todo: clever trig to use tan(val) somehow?
               T old_val = val;
               val = f(t_radial + dt);
-              T new_val_err = (val < 2. * M_PI ? -val : 4. * M_PI - val);
+              T new_val_err = (val < static_cast<T>(2. * M_PI) ? -val : static_cast<T>(4. * M_PI) - val);
               while (val_err * new_val_err < 0 && dt > 1e-8) {
                 dt /= 2;
                 val = f(t_radial + dt);
-                new_val_err = (val < 2. * M_PI ? -val : 4. * M_PI - val);
+                new_val_err = (val < static_cast<T>(2. * M_PI) ? -val : static_cast<T>(4. * M_PI) - val);
                 if (stats) {
                   stats->n_newton_steps++;
                 }
@@ -1202,7 +1202,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
             T t_newton = t + t_overstep;
             for (int i = 0; i < 8; i++) {
               T df = dot(ray_D, grad);
-              T dt = -(val < 2. * M_PI ? val : val - 4. * M_PI) / df;
+              T dt = -(val < static_cast<T>(2. * M_PI) ? val : val - static_cast<T>(4. * M_PI)) / df;
 
               t_newton += dt;
               val = f(t_newton);
@@ -1277,7 +1277,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
 
       t += t_overstep + r;
       if (params.use_overstepping)
-        t_overstep = r * .75;
+        t_overstep = r * static_cast<T>(.75);
       if (params.use_overstepping && stats)
         stats->successful_oversteps++;
     }
@@ -1321,7 +1321,7 @@ ccl_device bool newton_intersect_T(const solid_angle_intersection_params &params
   T epsilon = static_cast<T>(params.epsilon);
   T frequency = static_cast<T>(params.frequency);
   T levelset = static_cast<T>(params.levelset);
-  T shift = 4. * M_PI;
+  T shift = static_cast<T>(4. * M_PI);
 
   T3 ray_P = from_float3<T>(params.ray_P);
   T3 ray_D = from_float3<T>(params.ray_D);
@@ -1331,7 +1331,7 @@ ccl_device bool newton_intersect_T(const solid_angle_intersection_params &params
   T ray_tmax = static_cast<T>(params.ray_tmax);
 
   T lo_bound = 0;
-  T hi_bound = 4. * M_PI;
+  T hi_bound = static_cast<T>(4. * M_PI);
 
   std::vector<uint> polygonLoops;
   std::vector<T3> diskCenters, diskNormals;
@@ -1389,7 +1389,7 @@ ccl_device bool newton_intersect_T(const solid_angle_intersection_params &params
 
   for (int iN = 0; iN < 8; iN++) {
     T df = dot(ray_D, grad_f);
-    T f_err = (val < 2. * M_PI ? val : val - 4. * M_PI);
+    T f_err = (val < static_cast<T>(2. * M_PI) ? val : val - static_cast<T>(4. * M_PI));
     T dt = -f_err / df;
     dt = fmin(fmax(dt, -2.), 2.);  // clamp to [-2, 2]
 
@@ -1441,7 +1441,7 @@ ccl_device bool bisection_intersect_T(const solid_angle_intersection_params &par
   T epsilon = static_cast<T>(params.epsilon);
   T frequency = static_cast<T>(params.frequency);
   T levelset = static_cast<T>(params.levelset);
-  T shift = 4. * M_PI;
+  T shift = static_cast<T>(4. * M_PI);
 
   T3 ray_P = from_float3<T>(params.ray_P);
   T3 ray_D = from_float3<T>(params.ray_D);
@@ -1451,7 +1451,7 @@ ccl_device bool bisection_intersect_T(const solid_angle_intersection_params &par
   T ray_tmax = static_cast<T>(params.ray_tmax);
 
   T lo_bound = 0;
-  T hi_bound = 4. * M_PI;
+  T hi_bound = static_cast<T>(4. * M_PI);
 
   std::vector<uint> polygonLoops;
   std::vector<T3> diskCenters, diskNormals;
@@ -1547,7 +1547,6 @@ ccl_device bool bisection_intersect_T(const solid_angle_intersection_params &par
 
     if (verbosity >= 1) {
       auto pr = std::setprecision(4);
-      double fpi = 4. * M_PI;
       double dt = tb - ta;
       std::cout << std::setfill(' ') << std::setw(3) << iter << "| ta = " << std::setw(8)
                 << std::fixed << pr << ta << "  tb = " << std::setw(8) << std::fixed << pr << tb
@@ -1802,15 +1801,15 @@ ccl_device bool ray_gyroid_intersect_T(const gyroid_intersection_params &params,
       T dist = distanceToLevelset(f, levelset, grad);
       // If we're close enough to the level set, return a hit.
       if (dist < epsilon) {
-        *isect_t = t + t_overstep;
-        *isect_u = f;
-        *isect_v = ((T)iter) / ((T)params.max_iterations);
+        *isect_t = static_cast<float>(t + t_overstep);
+        *isect_u = static_cast<float>(f);
+        *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
         return true;
       }
 
       t += t_overstep + r;
       if (params.use_overstepping)
-        t_overstep = r * .75;
+        t_overstep = r * static_cast<T>(.75);
     }
     else {  // step back and try again
       t_overstep = 0;
@@ -2033,7 +2032,6 @@ ccl_device bool bisection_intersect_gyroid_T(const gyroid_intersection_params &p
 
     if (verbosity >= 1) {
       auto pr = std::setprecision(4);
-      double fpi = 4. * M_PI;
       double dt = tb - ta;
       std::cout << std::setfill(' ') << std::setw(3) << iter << "| ta = " << std::setw(8)
                 << std::fixed << pr << ta << "  tb = " << std::setw(8) << std::fixed << pr << tb
