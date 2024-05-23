@@ -118,7 +118,7 @@ def svn_update(args: argparse.Namespace, release_version: Optional[str]) -> None
                 sys.exit(1)
 
             svn_url_platform = svn_url + lib_platform
-            call(svn_non_interactive + ["checkout", svn_url_platform, lib_platform_dirpath])
+            call(svn_non_interactive + ["checkout", svn_url_platform+"@63466", lib_platform_dirpath])
 
     if args.use_tests:
         lib_tests = "tests"
@@ -179,7 +179,7 @@ def svn_update(args: argparse.Namespace, release_version: Optional[str]) -> None
                 call(svn_non_interactive + ["cleanup", dirpath])
                 # Switch to appropriate branch and update.
                 call(svn_non_interactive + ["switch", svn_url_full, dirpath], exit_on_error=False)
-                call(svn_non_interactive + ["update", dirpath])
+                call(svn_non_interactive + ["update -r63466", dirpath])
 
 
 # Test if git repo can be updated.
