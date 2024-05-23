@@ -952,7 +952,7 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
         T L = dot(displacement, diskNormals[iD]);
         T r0 = len(fma(displacement, -L, diskNormals[iD]));
         T rm = diskRadii[iD];
-        T d2 = std::pow(rm - r0, 2) + std::pow(L, 2);
+        T d2 = static_cast<T>(std::pow(rm - r0, 2) + std::pow(L, 2));
         *min_d2 = fmin(*min_d2, d2);
         if (d2 < *min_d2 && closest_point) {
           T3 rHat = fma(displacement, -L, diskNormals[iD]);
@@ -1041,14 +1041,14 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
             "iterations.\n");
       }
 
-      *isect_t = t + t_overstep;
-      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      *isect_t = static_cast<float>(t + t_overstep);
+      *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
       report_stats();
       if (params.capture_misses) {
         T3 pos = fma(ray_P, t, ray_D);
         T3 grad{0, 0, 0};
         T omega = total_solid_angle(pos, grad);
-        *isect_u = omega / static_cast<T>(4. * M_PI);
+        *isect_u = static_cast<float>(omega / static_cast<T>(4. * M_PI));
         return true;
       }
       else {
@@ -1066,8 +1066,8 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     T val = glsl_mod(omega - levelset, static_cast<T>(4. * M_PI));
 
     if (stats) {
-      stats->ts.push_back(t + t_overstep);
-      stats->vals.push_back(val);
+      stats->ts.push_back(static_cast<float>(t + t_overstep));
+      stats->vals.push_back(static_cast<float>(val));
     }
 
     if (frequency > 0) {
@@ -1105,10 +1105,10 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
     T r = get_max_step(val, R, lo_bound, hi_bound, shift) / ld;
 
     if (stats) {
-      stats->times.push_back(t + t_overstep);
-      stats->omegas.push_back(val);
-      stats->Rs.push_back(R);
-      stats->rs.push_back(r);
+      stats->times.push_back(static_cast<float>(t + t_overstep));
+      stats->omegas.push_back(static_cast<float>(val));
+      stats->Rs.push_back(static_cast<float>(R));
+      stats->rs.push_back(static_cast<float>(r));
     }
 
     if (r >= t_overstep) {  // commit to step
@@ -1120,9 +1120,9 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
       {
         // if (R < epsilon)   grad = pos - closestPoint; // TODO:
         // this?
-        *isect_t = t + t_overstep;
-        *isect_u = omega / static_cast<T>(4. * M_PI);
-        *isect_v = ((T)iter) / ((T)params.max_iterations);
+        *isect_t = static_cast<float>(t + t_overstep);
+        *isect_u = static_cast<float>(omega / static_cast<T>(4. * M_PI));
+        *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
         report_stats();
         return true;
       }
@@ -1188,9 +1188,9 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
               //     "false");
               // std::cout << std::endl;
               if (close) {
-                *isect_t = t_radial;
-                *isect_u = omega / static_cast<T>(4. * M_PI);
-                *isect_v = ((T)iter) / ((T)params.max_iterations);
+                *isect_t = static_cast<float>(t_radial);
+                *isect_u = static_cast<float>(omega / static_cast<T>(4. * M_PI));
+                *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
                 report_stats();
                 return true;
               }
@@ -1208,18 +1208,18 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
               val = f(t_newton);
 
               if (stats) {
-                stats->newton_dfs.push_back(df);
-                stats->newton_dts.push_back(dt);
-                stats->newton_ts.push_back(t_newton);
-                stats->newton_vals.push_back(val);
+                stats->newton_dfs.push_back(static_cast<float>(df));
+                stats->newton_dts.push_back(static_cast<float>(dt));
+                stats->newton_ts.push_back(static_cast<float>(t_newton));
+                stats->newton_vals.push_back(static_cast<float>(val));
                 stats->n_newton_steps++;
               }
               if (close_to_zero(
                       val, lo_bound, hi_bound, epsilon, grad, params.use_grad_termination))
               {
-                *isect_t = t_newton;
-                *isect_u = omega / static_cast<T>(4. * M_PI);
-                *isect_v = ((T)iter) / ((T)params.max_iterations);
+                *isect_t = static_cast<float>(t_newton);
+                *isect_u = static_cast<float>(omega / static_cast<T>(4. * M_PI));
+                *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
                 report_stats();
                 return true;
               }
@@ -1291,14 +1291,14 @@ ccl_device bool ray_nonplanar_polygon_intersect_T(const solid_angle_intersection
       stats->n_steps_after_eps++;
   }
 
-  *isect_t = t;
-  *isect_v = ((T)iter) / ((T)params.max_iterations);
+  *isect_t = static_cast<float>(t);
+  *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
   report_stats();
   if (params.capture_misses) {
     T3 pos = fma(ray_P, t, ray_D);
     T3 grad{0, 0, 0};
     T omega = total_solid_angle(pos, grad);
-    *isect_u = omega / static_cast<T>(4. * M_PI);
+    *isect_u = static_cast<float>(omega / static_cast<T>(4. * M_PI));
     return true;
   }
   else {
@@ -1408,16 +1408,16 @@ ccl_device bool newton_intersect_T(const solid_angle_intersection_params &params
     val = f(t, &grad_f);
 
     if (stats) {
-      stats->newton_dfs.push_back(df);
-      stats->newton_dts.push_back(dt);
-      stats->newton_ts.push_back(t);
-      stats->newton_vals.push_back(val);
+      stats->newton_dfs.push_back(static_cast<float>(df));
+      stats->newton_dts.push_back(static_cast<float>(dt));
+      stats->newton_ts.push_back(static_cast<float>(t));
+      stats->newton_vals.push_back(static_cast<float>(val));
       stats->n_newton_steps++;
     }
     if (close_to_zero(val, lo_bound, hi_bound, epsilon, grad_f, params.use_grad_termination)) {
-      *isect_t = t;
-      *isect_u = val / static_cast<T>(4. * M_PI);
-      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      *isect_t = static_cast<float>(t);
+      *isect_u = static_cast<float>(val / static_cast<T>(4. * M_PI));
+      *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
       report_stats();
       return true;
     }
@@ -1527,9 +1527,9 @@ ccl_device bool bisection_intersect_T(const solid_angle_intersection_params &par
       T3 pos = fma(ray_P, tc, ray_D);
       T omega = total_solid_angle(pos, nullptr);
       T val = glsl_mod(omega, static_cast<T>(4. * M_PI));
-      *isect_t = tc;
-      *isect_u = val / static_cast<T>(4. * M_PI);
-      *isect_v = ((T)iter) / ((T)params.max_iterations);
+      *isect_t = static_cast<float>(tc);
+      *isect_u = static_cast<float>(val / static_cast<T>(4. * M_PI));
+      *isect_v = static_cast<float>(((T)iter) / ((T)params.max_iterations));
       report_stats();
       return true;
     }

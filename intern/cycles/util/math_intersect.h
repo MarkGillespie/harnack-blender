@@ -423,7 +423,7 @@ ccl_device bool ray_nonplanar_polygon_intersect(const float3 ray_P,
   float t = ray_tmin;
   int iter = 0;
   float lo_bound = 0;
-  float hi_bound = 4. * M_PI;
+  float hi_bound = static_cast<float>(4. * M_PI);
 
   float ld = len(ray_D);
 
