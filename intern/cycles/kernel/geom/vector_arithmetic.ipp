@@ -199,12 +199,12 @@ d3 fma(const d3 &a, double s, const d3 &b)
   return {a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]};
 }
 
-d3 over(const d3 &a, float s)
+d3 over(const d3 &a, double s)
 {
   return {a[0] / s, a[1] / s, a[2] / s};
 }
 
-d3 times(const d3 &a, float s)
+d3 times(const d3 &a, double s)
 {
   return {a[0] * s, a[1] * s, a[2] * s};
 }
